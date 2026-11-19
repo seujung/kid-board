@@ -6,6 +6,14 @@ import type { ScheduledTask } from "../../core/scheduleEngine";
 import { formatLongDate } from "./theme";
 import { TaskCard } from "./TaskCard";
 
+/** 할 일이 이 수보다 많으면(셋째 줄부터) 카드를 줄여 세 줄을 스크롤 없이 보여 줍니다. */
+export const DENSE_AFTER = 6;
+
+/** 카드 수에 맞는 격자 class입니다. 7개 이상이면 작은 카드(`dense`)를 씁니다. */
+export function taskGridClass(count: number): string {
+  return count > DENSE_AFTER ? "task-grid dense" : "task-grid";
+}
+
 export interface TodayListProps {
   title: string;
   tasks: ScheduledTask[];
@@ -27,7 +35,7 @@ export function TodayList(props: TodayListProps) {
         </h2>
       </div>
       <div class="task-scroll">
-        <div class="task-grid">
+        <div class={taskGridClass(props.tasks.length)}>
           {props.tasks.map((s, i) => (
             <TaskCard
               key={s.task.id}
@@ -75,7 +83,7 @@ export function OtherDayList({ childID, day, data, onBack }: OtherDayListProps) 
         <div class="no-tasks">이날은 할 일이 없어요</div>
       ) : (
         <div class="task-scroll">
-          <div class="task-grid">
+          <div class={taskGridClass(tasks.length)}>
             {tasks.map((s, i) => (
               <TaskCard
                 key={s.task.id}

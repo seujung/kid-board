@@ -99,3 +99,42 @@ test("after bed Thu 22:30", async ({ page }) => {
   await expectInViewport(page, ".task-card");
   await page.screenshot({ path: `${SHOTS}/after-bed.png` });
 });
+
+test("seven to nine tasks shrink the cards so three rows fit without scrolling", async ({ page }) => {
+  await open(page, "2026-11-19T07:42:00+09:00");
+  const cards = panel(page, 0).locator(".task-card");
+  await expect(cards).toHaveCount(5);
+  await expect(panel(page, 0).locator(".task-grid")).not.toHaveClass(/dense/);
+
+  // 부모 모드에서 첫째의 아침 할 일을 4개 더해 9개로 만듭니다.
+  await page.locator(".settings-button").click();
+  await page.locator(".p-menu-item", { hasText: "할 일 관리" }).click();
+  for (const title of ["물 마시기", "이불 개기", "신발 신기", "인사하기"]) {
+    await page.locator(".p-add", { hasText: "아침 할 일 추가" }).click();
+    await page.locator(".p-form input[type=text]").fill(title);
+    await page.getByRole("button", { name: "저장" }).click();
+    await expect(page.locator(".p-row-title", { hasText: title })).toHaveCount(1);
+  }
+  await page.getByRole("button", { name: "보드로 돌아가기" }).click();
+  await expect(cards).toHaveCount(9);
+  await expect(panel(page, 0).locator(".task-grid")).toHaveClass(/dense/);
+
+  // 스크롤 없이 세 줄이 모두 보입니다.
+  const scroll = panel(page, 0).locator(".task-scroll");
+  const fits = await scroll.evaluate((el) => el.scrollHeight <= el.clientHeight);
+  expect(fits).toBe(true);
+  const area = await scroll.boundingBox();
+  const last = await cards.nth(8).boundingBox();
+  expect(area && last).toBeTruthy();
+  if (area && last) expect(last.y + last.height).toBeLessThanOrEqual(area.y + area.height);
+  await expectInViewport(page, ".panel:first-child .task-card");
+
+  // 완료 도장과 "지금 하자!" 표시도 작은 카드 안에 맞습니다.
+  await cards.nth(0).click();
+  await cards.nth(1).click();
+  await expect(panel(page, 0).locator(".stamp")).toHaveCount(2);
+  await page.screenshot({ path: `${SHOTS}/board-nine-tasks.png` });
+
+  // 6개 이하인 둘째는 원래 크기입니다.
+  await expect(panel(page, 1).locator(".task-grid")).not.toHaveClass(/dense/);
+});
