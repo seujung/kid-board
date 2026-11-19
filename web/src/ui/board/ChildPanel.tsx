@@ -4,7 +4,6 @@ import { boardState, canToggle } from "../../core/boardState";
 import type { ChildBoardState } from "../../core/boardState";
 import { sameDay } from "../../core/dayDate";
 import type { DayDate } from "../../core/dayDate";
-import { isDimmed } from "../../core/displayPolicy";
 import type { BoardData } from "../../core/domain";
 import { timesOn } from "../../core/scheduleEngine";
 import type { ScheduledTask } from "../../core/scheduleEngine";
@@ -100,7 +99,8 @@ export function ChildPanel({ store, clock, state, data, onSaveError }: ChildPane
         nextDone,
         remaining: after.remaining,
         phaseTotal: after.visibleTasks.length,
-        dimmed: isDimmed(now, settings.dimPeriods),
+        // 검은 막이 덮여 있으면 카드를 누를 수 없습니다. 화면 끄기 시간에 깨운 30초 동안은 소리를 냅니다.
+        dimmed: false,
         enabled: settings.sound.enabled,
       }),
       settings.sound.volume,

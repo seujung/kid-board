@@ -194,3 +194,43 @@ test("previews play at the chosen volume and turning sound off silences the boar
   await expect(page.getByRole("switch", { name: "소리 켜기" })).toHaveAttribute("aria-checked", "false");
   await expect(page.locator(".p-segment-item.on")).toHaveText("작게");
 });
+
+test("completing a task while a screen-off period is woken still chimes", async ({ page }) => {
+  await stubAudio(page);
+  await open(page, "2026-11-19T07:42:00+09:00");
+  // 화면 끄기 시간을 매일 07:00~09:00으로 바꾸고 다시 엽니다.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open("kid-board", 1);
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const db = req.result;
+          const store = db.transaction("doc", "readwrite").objectStore("doc");
+          const get = store.get("main");
+          get.onsuccess = () => {
+            const doc = get.result;
+            doc.settings.dimPeriods = [
+              { id: "m", start: { hour: 7, minute: 0 }, end: { hour: 9, minute: 0 }, weekdays: [1, 2, 3, 4, 5, 6, 7] },
+            ];
+            const put = store.put(doc, "main");
+            put.onsuccess = () => {
+              db.close();
+              resolve();
+            };
+            put.onerror = () => reject(put.error);
+          };
+        };
+      }),
+  );
+  await page.reload();
+  const overlay = page.locator(".night-overlay");
+  await expect(overlay).toBeVisible();
+  // 막을 누르는 터치는 카드로 가지 않고 소리도 없습니다.
+  await overlay.click();
+  await expect(overlay).toHaveCount(0);
+  expect(await requested(page)).toEqual({ chime: 0, fanfare: 0 });
+  await panel(page, 0).locator(".task-card").nth(0).click();
+  await expect(panel(page, 0).locator(".stamp")).toHaveCount(1);
+  expect(await requested(page)).toEqual({ chime: 1, fanfare: 0 });
+});

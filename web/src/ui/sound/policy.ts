@@ -19,7 +19,7 @@ export interface SoundInput {
   remaining: number;
   /** 이번 시간대에 보이는 할 일 수입니다. */
   phaseTotal: number;
-  /** 화면 끄기 시간인지입니다. */
+  /** 화면 끄기 시간의 검은 막이 덮여 있는지입니다. 막을 눌러 깨운 동안은 거짓입니다. */
   dimmed: boolean;
   /** 부모 모드의 "소리 켜기"입니다. */
   enabled: boolean;
