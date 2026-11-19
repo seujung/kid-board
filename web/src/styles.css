@@ -1,0 +1,75 @@
+:root {
+  --ink: #33291f;
+  --bg: #fff7e8;
+  --stamp-red: #db292e;
+  font-family: -apple-system, "SF Pro Rounded", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+#app {
+  height: 100%;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.full-message {
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.full-message-title {
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.full-message-body {
+  margin-top: 16px;
+  max-width: 640px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 50;
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: rgba(40, 32, 28, 0.92);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
