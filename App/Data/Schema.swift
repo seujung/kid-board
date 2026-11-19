@@ -32,7 +32,8 @@ enum KidBoardSchemaV1: VersionedSchema {
     }
 }
 
-/// 두 번째 저장소 스키마입니다. `AppSettingsModel`에 `didSeed`를 더했습니다.
+/// 두 번째 저장소 스키마입니다. `AppSettingsModel`에 `didSeed`와 `lastSeenInstallID`를 더하고
+/// `lastSeenProfileCreation`을 뺐습니다.
 enum KidBoardSchemaV2: VersionedSchema {
     static let versionIdentifier = Schema.Version(2, 0, 0)
 
@@ -60,13 +61,22 @@ enum KidBoardContainer {
 
     /// 기본 위치의 저장소를 엽니다. `inMemory`가 `true`이면 메모리 전용 저장소를 엽니다.
     static func make(inMemory: Bool = false) throws -> ModelContainer {
-        try ModelContainer(for: schema, migrationPlan: KidBoardMigrationPlan.self,
-                           configurations: ModelConfiguration(isStoredInMemoryOnly: inMemory))
+        try open(ModelConfiguration(isStoredInMemoryOnly: inMemory))
     }
 
     /// `url`의 저장소를 엽니다. 이전 테스트에서 씁니다.
     static func make(url: URL) throws -> ModelContainer {
-        try ModelContainer(for: schema, migrationPlan: KidBoardMigrationPlan.self,
-                           configurations: ModelConfiguration(url: url))
+        try open(ModelConfiguration(url: url))
+    }
+
+    /// 이전 계획으로 엽니다. 저장소가 계획에 없는 모양이면(예: Task 8 시험 설치의 저장소)
+    /// 계획 없이 다시 엽니다. 이때 SwiftData가 자동 경량 이전을 하고 저장소를 현재 버전으로 기록합니다.
+    private static func open(_ configuration: ModelConfiguration) throws -> ModelContainer {
+        do {
+            return try ModelContainer(for: schema, migrationPlan: KidBoardMigrationPlan.self,
+                                      configurations: configuration)
+        } catch {
+            return try ModelContainer(for: schema, configurations: configuration)
+        }
     }
 }
