@@ -194,6 +194,8 @@ final class AppSettingsModel {
     var lockoutFailures: Int
     var lockoutUntil: Date?
     var locationName: String?
+    /// 날씨 지역의 시도 이름입니다. 부모 모드 표시에만 씁니다.
+    var locationAdmin1: String?
     var latitude: Double?
     var longitude: Double?
     var lastSeenProfileCreation: Date?

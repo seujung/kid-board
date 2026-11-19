@@ -138,3 +138,57 @@ private func morningTask(_ data: BoardData) -> (child: UUID, task: UUID) {
     #expect(!store.toggleCompletion(childID: child, taskID: task, now: date(11, 19, 8, 30)))
     #expect(count == 2)
 }
+
+// MARK: PIN and weather location
+
+@MainActor
+private func makeContainer() throws -> ModelContainer {
+    let schema = Schema([
+        ChildModel.self, TaskModel.self, TaskScheduleModel.self, DailyTimesModel.self,
+        CompletionModel.self, AppSettingsModel.self, WeatherCacheModel.self,
+    ])
+    return try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+}
+
+@MainActor @Test func pinSetAndVerify() throws {
+    let store = try makeStore()
+    #expect(!store.hasPin)
+    store.setPin("1234")
+    #expect(store.hasPin)
+    #expect(store.verifyPin("1234", now: date(11, 19, 7)) == .ok)
+    #expect(store.verifyPin("0000", now: date(11, 19, 7)) == .wrong)
+}
+
+@MainActor @Test func pinLocksAfterFive() throws {
+    let store = try makeStore()
+    store.setPin("1234")
+    let start = date(11, 19, 7)
+    for attempt in 0..<4 {
+        #expect(store.verifyPin("0000", now: start.addingTimeInterval(Double(attempt))) == .wrong)
+    }
+    let fifth = start.addingTimeInterval(4)
+    #expect(store.verifyPin("0000", now: fifth) == .locked(until: fifth.addingTimeInterval(60)))
+    #expect(store.verifyPin("1234", now: fifth.addingTimeInterval(30)) == .locked(until: fifth.addingTimeInterval(60)))
+    #expect(store.verifyPin("1234", now: fifth.addingTimeInterval(61)) == .ok)
+}
+
+@MainActor @Test func pinLockoutPersistsAcrossStores() throws {
+    let container = try makeContainer()
+    let store = BoardStore(context: ModelContext(container), calendar: seoul)
+    store.setPin("1234")
+    let start = date(11, 19, 7)
+    for _ in 0..<5 { _ = store.verifyPin("0000", now: start) }
+    let reopened = BoardStore(context: ModelContext(container), calendar: seoul)
+    #expect(reopened.verifyPin("1234", now: start.addingTimeInterval(10)) == .locked(until: start.addingTimeInterval(60)))
+}
+
+@MainActor @Test func weatherLocationPersists() throws {
+    let container = try makeContainer()
+    let store = BoardStore(context: ModelContext(container), calendar: seoul)
+    #expect(store.weatherLocation == nil)
+    store.setWeatherLocation(GeoPlace(name: "성남시", admin1: "경기도", latitude: 37.42, longitude: 127.13))
+    let reopened = BoardStore(context: ModelContext(container), calendar: seoul)
+    #expect(reopened.weatherLocation?.name == "성남시")
+    #expect(reopened.weatherLocation?.admin1 == "경기도")
+    #expect(reopened.weatherLocation?.latitude == 37.42)
+}

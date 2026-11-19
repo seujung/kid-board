@@ -11,6 +11,13 @@ extension Calendar {
     }
 }
 
+/// `BoardStore.verifyPin`의 결과입니다.
+enum PinResult: Equatable {
+    case ok
+    case wrong
+    case locked(until: Date)
+}
+
 @MainActor
 final class BoardStore: ObservableObject {
     let context: ModelContext
@@ -77,6 +84,67 @@ final class BoardStore: ObservableObject {
         context.insert(created)
         try? context.save()
         return created
+    }
+
+    // MARK: PIN
+
+    var hasPin: Bool { settings().pinHash != nil }
+
+    /// 새 salt로 PIN 해시를 저장하고 잠금 상태를 풉니다.
+    func setPin(_ pin: String) {
+        let settings = settings()
+        let salt = PinHasher.makeSalt()
+        settings.pinSalt = salt
+        settings.pinHash = PinHasher.hash(pin: pin, salt: salt)
+        settings.lockout = PinLockout()
+        save()
+    }
+
+    /// PIN을 확인합니다. 실패 횟수와 잠금 시각은 `AppSettingsModel`에 저장하므로 다시 실행해도 유지됩니다.
+    func verifyPin(_ pin: String, now: Date) -> PinResult {
+        let settings = settings()
+        var lockout = settings.lockout
+        if lockout.isLocked(now: now), let until = lockout.lockedUntil { return .locked(until: until) }
+        guard let hash = settings.pinHash, let salt = settings.pinSalt else { return .wrong }
+        let result: PinResult
+        if PinHasher.hash(pin: pin, salt: salt) == hash {
+            lockout.recordSuccess()
+            result = .ok
+        } else {
+            lockout.recordFailure(now: now)
+            if lockout.isLocked(now: now), let until = lockout.lockedUntil {
+                result = .locked(until: until)
+            } else {
+                result = .wrong
+            }
+        }
+        settings.lockout = lockout
+        save()
+        return result
+    }
+
+    /// 잠겨 있으면 풀리는 시각을 돌려줍니다.
+    func pinLockedUntil(now: Date) -> Date? {
+        let lockout = settings().lockout
+        return lockout.isLocked(now: now) ? lockout.lockedUntil : nil
+    }
+
+    // MARK: Weather location
+
+    var weatherLocation: GeoPlace? {
+        let settings = settings()
+        guard let name = settings.locationName, let latitude = settings.latitude,
+              let longitude = settings.longitude else { return nil }
+        return GeoPlace(name: name, admin1: settings.locationAdmin1, latitude: latitude, longitude: longitude)
+    }
+
+    func setWeatherLocation(_ place: GeoPlace) {
+        let settings = settings()
+        settings.locationName = place.name
+        settings.locationAdmin1 = place.admin1
+        settings.latitude = place.latitude
+        settings.longitude = place.longitude
+        save()
     }
 
     // MARK: Seed
