@@ -39,6 +39,10 @@ struct BoardView: View {
         .preferredColorScheme(.light)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
+        .background(TouchObserver { kiosk.userTouched(now: clock.now()) })
+        .onChange(of: showsParentMode) { _, shown in
+            kiosk.setSuspended(shown, now: clock.now())
+        }
         .onAppear {
             let today = DayDate(clock.now(), calendar: store.calendar)
             #if DEBUG

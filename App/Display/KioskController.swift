@@ -2,9 +2,49 @@ import Foundation
 import KidBoardCore
 import UIKit
 
+/// 화면 밝기를 읽고 바꾸는 곳입니다. 테스트에서 가짜로 바꿉니다.
+@MainActor
+protocol ScreenBrightness: AnyObject {
+    var brightness: CGFloat { get set }
+}
+
+/// 기기의 실제 화면 밝기입니다.
+@MainActor
+final class MainScreenBrightness: ScreenBrightness {
+    var brightness: CGFloat {
+        get { UIScreen.main.brightness }
+        set { UIScreen.main.brightness = newValue }
+    }
+}
+
+/// 야간에 어둡게 하기 전의 화면 밝기를 `UserDefaults`에 저장합니다.
+///
+/// 03:00 재설치는 앱을 백그라운드 알림 없이 끝냅니다. 그러면 화면 밝기가 0으로 남습니다.
+/// 값을 저장해 두면 새로 실행한 앱이 0 대신 원래 밝기로 되돌릴 수 있습니다.
+struct PreDimBrightnessStore {
+    static let key = "KidBoard.preDimBrightness"
+    let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// 저장한 밝기입니다. 어둡게 하지 않은 상태이면 `nil`입니다.
+    var value: Double? {
+        get { defaults.object(forKey: Self.key) as? Double }
+        nonmutating set {
+            if let newValue { defaults.set(newValue, forKey: Self.key) } else { defaults.removeObject(forKey: Self.key) }
+        }
+    }
+}
+
 /// 화면을 계속 켜 두고, 야간에 어둡게 하며, 서명 만료와 유도 접근 안내를 관리합니다.
 @MainActor
 final class KioskController: ObservableObject {
+    /// 되돌릴 밝기가 이 값보다 낮으면 `fallbackBrightness`로 되돌립니다. 화면이 너무 어두운 채로 남지 않게 합니다.
+    static let minimumRestoredBrightness = 0.1
+    static let fallbackBrightness = 0.5
+
     @Published private(set) var isNightDimmed = false
     /// 만료가 2일 이내일 때 남은 일수입니다. 프로파일이 없으면(시뮬레이터) `nil`입니다.
     @Published private(set) var expiryDaysLeft: Int?
@@ -14,20 +54,31 @@ final class KioskController: ObservableObject {
     private let clock: BoardClock
     private let profile: (creation: Date, expiration: Date)?
     private var state: NightDimState
+    private let screen: ScreenBrightness
+    private let brightnessStore: PreDimBrightnessStore
     private var pendingTouch = false
-    private var savedBrightness: CGFloat?
-    private var dimApplied = false
+    /// 화면을 어둡게 해 둔 상태이면 `true`입니다.
+    private var dimApplied: Bool
     private var isActive = true
+    /// 부모 모드가 열려 있으면 `true`입니다. 그동안 어둡게 하지 않습니다.
+    private var isSuspended = false
     private var timer: Timer?
     private var lastExpiryCheck: Date?
     private var observers: [NSObjectProtocol] = []
 
     init(store: BoardStore, clock: BoardClock = .live,
-         profile: (creation: Date, expiration: Date)? = KioskController.loadProfile()) {
+         profile: (creation: Date, expiration: Date)? = KioskController.loadProfile(),
+         screen: ScreenBrightness? = nil,
+         brightnessStore: PreDimBrightnessStore = PreDimBrightnessStore()) {
         self.store = store
         self.clock = clock
         self.profile = profile
+        self.screen = screen ?? MainScreenBrightness()
+        self.brightnessStore = brightnessStore
         self.state = NightDimState(calendar: store.calendar)
+        // 저장한 밝기가 있으면 이전 프로세스가 어둡게 한 채로 끝났습니다. 화면은 아직 어둡습니다.
+        // 어둡게 한 상태로 시작해야 낮이면 바로, 밤이면 06:00에 저장한 밝기로 되돌립니다.
+        self.dimApplied = brightnessStore.value != nil
     }
 
     /// 앱 번들의 프로비저닝 프로파일에서 생성일과 만료일을 읽습니다. 시뮬레이터에는 파일이 없어 `nil`입니다.
@@ -67,9 +118,26 @@ final class KioskController: ObservableObject {
     }
 
     /// 화면을 눌렀을 때 부릅니다. 야간이면 `nightWakeDuration` 동안 평소 밝기로 돌립니다.
+    /// 깨어 있는 동안 누르면 깨어 있는 시간을 다시 `nightWakeDuration`으로 늘립니다.
     func userTouched(now: Date) {
         pendingTouch = true
         evaluate(now: now)
+    }
+
+    /// 부모 모드를 열고 닫을 때 부릅니다. 열려 있는 동안 어둡게 하지 않습니다.
+    /// 닫으면 화면을 누른 것으로 보고 `nightWakeDuration` 동안 밝게 둡니다.
+    func setSuspended(_ suspended: Bool, now: Date) {
+        if isSuspended && !suspended { pendingTouch = true }
+        isSuspended = suspended
+        evaluate(now: now)
+    }
+
+    /// 지금 시각으로 야간 판정과 밝기를 다시 맞춥니다. 타이머가 매초 부릅니다.
+    func evaluate(now: Date) {
+        let output = state.step(now: now, touched: pendingTouch, suspended: isSuspended)
+        pendingTouch = false
+        isNightDimmed = output.dimmed
+        applyBrightness(dim: output.dimmed && isActive)
     }
 
     func dismissGuidedAccessBanner() {
@@ -88,21 +156,16 @@ final class KioskController: ObservableObject {
         }
     }
 
-    private func evaluate(now: Date) {
-        let output = state.step(now: now, touched: pendingTouch)
-        pendingTouch = false
-        isNightDimmed = output.dimmed
-        applyBrightness(dim: output.dimmed && isActive)
-        if !output.isNight { savedBrightness = nil }
-    }
-
     private func applyBrightness(dim: Bool) {
         if dim, !dimApplied {
-            if savedBrightness == nil { savedBrightness = UIScreen.main.brightness }
-            UIScreen.main.brightness = 0
+            if brightnessStore.value == nil { brightnessStore.value = Double(screen.brightness) }
+            screen.brightness = 0
             dimApplied = true
         } else if !dim, dimApplied {
-            if let savedBrightness { UIScreen.main.brightness = savedBrightness }
+            if let saved = brightnessStore.value {
+                screen.brightness = CGFloat(saved < Self.minimumRestoredBrightness ? Self.fallbackBrightness : saved)
+            }
+            brightnessStore.value = nil
             dimApplied = false
         }
     }

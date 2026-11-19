@@ -47,3 +47,23 @@ struct NightDimStateTests {
         #expect(state.step(now: at(22, day: 20), touched: false).dimmed == true)
     }
 }
+
+struct NightDimSuspensionTests {
+    @Test func suspendedIsNeverDimmedAndWakesAfterResume() {
+        var state = NightDimState(calendar: seoul)
+        #expect(state.step(now: at(23), touched: false).dimmed)
+        #expect(state.step(now: at(23, 1), touched: false, suspended: true) == .init(dimmed: false, isNight: true))
+        #expect(!state.step(now: at(23, 10), touched: false, suspended: true).dimmed)
+        #expect(!state.step(now: at(23, 10, 29), touched: false).dimmed)
+        #expect(state.step(now: at(23, 10, 30), touched: false).dimmed)
+    }
+
+    @Test func touchDuringWakeExtendsIt() {
+        var state = NightDimState(calendar: seoul)
+        _ = state.step(now: at(23), touched: false)
+        _ = state.step(now: at(23, 0, 10), touched: true)
+        #expect(!state.step(now: at(23, 0, 35), touched: true).dimmed)
+        #expect(!state.step(now: at(23, 1, 4), touched: false).dimmed)
+        #expect(state.step(now: at(23, 1, 5), touched: false).dimmed)
+    }
+}
