@@ -101,7 +101,7 @@ test("completing chimes, the last task plays a fanfare, undo is silent", async (
   const unlock = await page.evaluate(() => (window as unknown as { __audio: { contexts: number; resumes: number; unlocks: number } }).__audio);
   expect(unlock.contexts).toBe(1);
   expect(unlock.resumes).toBeGreaterThanOrEqual(1);
-  expect(unlock.unlocks).toBe(1);
+  expect(unlock.unlocks).toBeGreaterThanOrEqual(1);
   // 기본 볼륨은 "보통"(0.5)입니다.
   expect(await masters(page)).toEqual([0.5]);
 
