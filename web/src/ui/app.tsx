@@ -4,6 +4,7 @@ import { BoardStore } from "../store/boardStore";
 import type { DocStorage } from "../store/idb";
 import { APP_VERSION } from "../version";
 import { BoardView } from "./board/BoardView";
+import { NightOverlay } from "./display/NightOverlay";
 import type { WeatherState } from "./board/useWeather";
 import { ParentMode } from "./parent/ParentMode";
 import type { UpdateInfo } from "./parent/ParentHome";
@@ -35,13 +36,13 @@ function Message({ title, body }: { title: string; body?: string }) {
 export interface AppProps {
   storage: DocStorage;
   clock: Clock;
-  /** 새 버전 정보입니다. Task 10이 서비스 워커와 연결합니다. 없으면 "새 버전 있음"을 표시하지 않습니다. */
+  /** 새 버전 정보입니다. 운영 빌드에서 main.tsx가 서비스 워커와 연결합니다. 없으면 "새 버전 있음"을 표시하지 않습니다. */
   update?: UpdateInfo;
 }
 
 export function App({ storage, clock, update }: AppProps) {
   const [boot, setBoot] = useState<Boot>({ kind: "loading" });
-  /** 부모 모드가 열려 있는지입니다. Task 10의 야간 막은 이 값이 참이면 어둡게 하지 않습니다. */
+  /** 부모 모드가 열려 있는지입니다. 야간 막은 이 값이 참이면 어둡게 하지 않습니다. */
   const [parentOpen, setParentOpen] = useState(false);
   /** 보드가 쓰는 날씨 상태입니다. 부모 모드에서 지역을 바꾸면 이 상태의 `refreshNow`를 부릅니다. */
   const weather = useRef<WeatherState | null>(null);
@@ -67,6 +68,7 @@ export function App({ storage, clock, update }: AppProps) {
           return <SettingsButton onLongPress={() => setParentOpen(true)} />;
         }}
       />
+      <NightOverlay clock={clock} parentOpen={parentOpen} />
       {parentOpen && (
         <ParentMode
           store={store}

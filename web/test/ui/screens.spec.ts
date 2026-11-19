@@ -76,6 +76,19 @@ test("no school Sat 10:00", async ({ page }) => {
 test("after bed Thu 22:30", async ({ page }) => {
   await open(page, "2026-11-19T22:30:00+09:00");
   await withSeoulWeather(page);
+  // 야간에는 검은 막이 보드를 덮고 HH:mm 시계만 보입니다.
+  const overlay = page.locator(".night-overlay");
+  await expect(overlay).toBeVisible();
+  await expect(overlay.locator(".night-clock")).toHaveText("22:30");
+  await page.screenshot({ path: `${SHOTS}/night.png` });
+  // 막을 누르면 막만 걷히고, 같은 터치가 아래 카드로 가지 않습니다.
+  const card = panel(page, 0).locator(".task-card").nth(0);
+  const box = await card.boundingBox();
+  expect(box).not.toBeNull();
+  if (box) await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(overlay).toHaveCount(0);
+  await page.waitForTimeout(300);
+  await expect(card).not.toHaveClass(/shake/);
   await expectInViewport(page, ".panel");
   await expect(panel(page, 0).locator(".finished-text")).toHaveText("내일 또 해 보자");
   await expect(panel(page, 0).locator(".now-badge")).toHaveCount(0);
