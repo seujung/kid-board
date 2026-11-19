@@ -1,0 +1,31 @@
+import { addDays, compareDay, sameDay } from "./dayDate";
+import type { DayDate } from "./dayDate";
+import type { TaskScheduleInfo, TimeSlot, Weekday } from "./domain";
+
+/** 오늘부터 적용되는 일정 변경을 반영한 새 목록을 돌려줍니다. 과거 기록이 바뀌지 않도록 필요하면 일정을 나눕니다. */
+export function changeSchedule(
+  schedules: TaskScheduleInfo[],
+  taskID: string,
+  slot: TimeSlot,
+  weekdays: Weekday[],
+  today: DayDate,
+  newID: string,
+): TaskScheduleInfo[] {
+  const result = schedules.map((s) => ({ ...s }));
+  const index = result.findIndex(
+    (s) =>
+      s.taskID === taskID &&
+      compareDay(s.startOn, today) <= 0 &&
+      (s.endOn === null || compareDay(today, s.endOn) <= 0),
+  );
+  if (index >= 0) {
+    if (sameDay(result[index]!.startOn, today)) {
+      result[index]!.slot = slot;
+      result[index]!.weekdays = weekdays.slice();
+      return result;
+    }
+    result[index]!.endOn = addDays(today, -1);
+  }
+  result.push({ id: newID, taskID, slot, weekdays: weekdays.slice(), startOn: today, endOn: null });
+  return result;
+}
