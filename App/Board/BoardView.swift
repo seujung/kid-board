@@ -7,6 +7,7 @@ struct BoardView: View {
     @ObservedObject var store: BoardStore
     @StateObject private var weather: WeatherViewModel
     private let clock: BoardClock
+    @State private var showsParentMode = false
 
     /// 한 화면에 놓는 자녀 패널의 최대 수입니다.
     static let maxPanels = 2
@@ -39,7 +40,45 @@ struct BoardView: View {
             #endif
             store.seedIfEmpty(today: today)
             weather.start()
+            #if DEBUG
+            if DemoData.parentRoute != nil {
+                DemoData.prepareParentRoute(store, now: clock.now())
+                showsParentMode = true
+            }
+            #endif
         }
+        .fullScreenCover(isPresented: $showsParentMode) {
+            parentMode
+        }
+    }
+
+    @ViewBuilder
+    private var parentMode: some View {
+        let close = { showsParentMode = false }
+        #if DEBUG
+        if let route = DemoData.parentRoute {
+            ParentModeView(store: store, weather: weather, clock: clock,
+                           initialStage: route.stage, initialPath: route.path, onClose: close)
+        } else {
+            ParentModeView(store: store, weather: weather, clock: clock, onClose: close)
+        }
+        #else
+        ParentModeView(store: store, weather: weather, clock: clock, onClose: close)
+        #endif
+    }
+
+    /// 부모 모드를 여는 설정 아이콘입니다. 아이들 눈에 덜 띄게 작고 흐리게 그립니다.
+    /// `ParentGate.longPressDuration` 동안 계속 눌러야 열리고, 짧게 누르면 아무 일도 없습니다.
+    private var settingsIcon: some View {
+        Image(systemName: "gearshape")
+            .font(.system(size: 18, weight: .regular))
+            .foregroundStyle(Color.gray.opacity(0.45))
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+            .onLongPressGesture(minimumDuration: ParentGate.longPressDuration) {
+                showsParentMode = true
+            }
+            .accessibilityLabel("부모 모드 (3초 길게 누르기)")
     }
 
     private func content(now: Date) -> some View {
@@ -52,8 +91,10 @@ struct BoardView: View {
                 HeaderView(now: now, calendar: calendar, weather: weather.display,
                            needsLocation: weather.needsLocation, locationName: weather.locationName,
                            latestSchoolTime: Self.latestSchoolTime(children: children, now: now,
-                                                                   calendar: calendar, data: data))
-                    .frame(height: min(max(geo.size.height * 0.26, 190), 280))
+                                                                   calendar: calendar, data: data)) {
+                    settingsIcon
+                }
+                .frame(height: min(max(geo.size.height * 0.26, 190), 280))
                 HStack(spacing: 16) {
                     ForEach(children) { child in
                         ChildPanelView(store: store, clock: clock,

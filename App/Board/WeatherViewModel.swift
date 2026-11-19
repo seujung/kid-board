@@ -17,7 +17,7 @@ final class WeatherViewModel: ObservableObject {
     private let client: OpenMeteoClient
     private var cached: WeatherSnapshot?
     private var loop: Task<Void, Never>?
-    private var isRefreshing = false
+    private var fetch: Task<Void, Never>?
 
     init(store: BoardStore, clock: BoardClock = .live, http: HTTPClient = URLSession.shared) {
         self.store = store
@@ -41,6 +41,7 @@ final class WeatherViewModel: ObservableObject {
 
     deinit {
         loop?.cancel()
+        fetch?.cancel()
     }
 
     /// 저장해 둔 날씨를 읽고 주기적인 새로 고침을 시작합니다. 여러 번 불러도 한 번만 시작합니다.
@@ -50,19 +51,38 @@ final class WeatherViewModel: ObservableObject {
         recompute()
         loop = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refresh()
+                self?.refreshNow()
                 try? await Task.sleep(for: .seconds(WeatherPolicy.refreshInterval))
             }
         }
     }
 
-    /// 지금 바로 다시 가져옵니다. 부모 모드에서 지역을 바꾼 뒤에 부릅니다.
+    /// 지금 바로 다시 가져옵니다. 이미 받는 중인 요청이 있으면 취소하고 새로 시작합니다.
     func refreshNow() {
-        Task { await refresh() }
+        fetch?.cancel()
+        fetch = Task { [weak self] in await self?.refresh() }
+    }
+
+    /// 부모 모드에서 지역을 바꾼 뒤에 부릅니다.
+    ///
+    /// 받는 중인 요청을 취소하고, 이전 지역의 날씨를 화면과 캐시에서 지운 뒤, 바로 다시 가져옵니다.
+    func locationChanged() {
+        fetch?.cancel()
+        fetch = nil
+        cached = nil
+        cacheRow()?.info = nil
+        try? store?.context.save()
+        recompute()
+        refreshNow()
+    }
+
+    /// 날씨 지역을 검색합니다. 보드와 같은 네트워크 클라이언트를 씁니다.
+    func searchPlaces(_ query: String) async throws -> [GeoPlace] {
+        try await client.searchPlaces(query)
     }
 
     private func refresh() async {
-        guard let store, !isRefreshing else { return }
+        guard let store else { return }
         let settings = store.settings()
         locationName = settings.locationName
         guard let latitude = settings.latitude, let longitude = settings.longitude else {
@@ -71,9 +91,10 @@ final class WeatherViewModel: ObservableObject {
             return
         }
         needsLocation = false
-        isRefreshing = true
-        defer { isRefreshing = false }
-        if let snapshot = try? await client.forecast(latitude: latitude, longitude: longitude) {
+        let snapshot = try? await client.forecast(latitude: latitude, longitude: longitude)
+        // 취소된 요청(이전 지역)의 결과는 버립니다.
+        guard !Task.isCancelled else { return }
+        if let snapshot {
             cached = snapshot
             persist(snapshot)
         }
