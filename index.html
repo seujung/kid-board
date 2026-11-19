@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="할 일 보드">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>할 일 보드 시험</title>
+<style>
+  :root { --bg:#fff8ef; --fg:#2b2622; --ok:#2e9e5b; --bad:#d6453d; --card:#ffffff; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px; background:var(--bg); color:var(--fg);
+         font: 20px -apple-system, "Apple SD Gothic Neo", sans-serif; -webkit-user-select:none; }
+  h1 { font-size:28px; margin:0 0 8px; }
+  #clock { font-size:64px; font-weight:800; font-variant-numeric: tabular-nums; }
+  .grid { display:flex; flex-wrap:wrap; margin:0 -8px; }
+  .card { background:var(--card); border-radius:16px; padding:16px; margin:8px; flex:1 1 300px;
+          box-shadow:0 2px 6px rgba(0,0,0,.08); }
+  .row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee; }
+  .ok { color:var(--ok); font-weight:700; } .bad { color:var(--bad); font-weight:700; }
+  input[type=text] { width:100%; font-size:24px; padding:12px; border:2px solid #ccc; border-radius:12px; -webkit-user-select:text; }
+  button { font-size:22px; padding:12px 20px; border:0; border-radius:12px; background:#e85a4f; color:#fff; margin:8px 8px 0 0; }
+  #log { font-size:16px; white-space:pre-wrap; color:#555; }
+</style>
+</head>
+<body>
+<h1>할 일 보드 — iPad 시험 페이지 <span id="ver"></span></h1>
+<div id="clock">--:--:--</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>환경 확인</h2>
+    <div id="checks"></div>
+  </div>
+
+  <div class="card">
+    <h2>저장 확인</h2>
+    <p>버튼을 몇 번 누른 뒤 앱을 완전히 닫고 다시 여십시오. 숫자가 유지되어야 합니다.</p>
+    <div class="row"><span>localStorage 숫자</span><b id="ls">-</b></div>
+    <div class="row"><span>IndexedDB 숫자</span><b id="idb">-</b></div>
+    <button id="inc">숫자 +1</button>
+  </div>
+
+  <div class="card">
+    <h2>받아쓰기 확인</h2>
+    <p>입력 칸을 누르고 키보드의 🎤 버튼으로 말해 보십시오.</p>
+    <input id="dict" type="text" placeholder="예: 이 닦기">
+    <div class="row"><span>저장된 문장</span><b id="dictSaved">-</b></div>
+  </div>
+
+  <div class="card">
+    <h2>날씨 요청 확인</h2>
+    <div class="row"><span>서울 현재 기온</span><b id="wx">확인 중…</b></div>
+  </div>
+</div>
+
+<div class="card"><h2>기록</h2><div id="log"></div></div>
+
+<script>
+var VERSION = "spike-1";
+document.getElementById("ver").textContent = "(" + VERSION + ")";
+function log(m){ var el=document.getElementById("log"); el.textContent = new Date().toLocaleTimeString("ko-KR") + "  " + m + "\n" + el.textContent; }
+function pad(n){ return (n<10?"0":"") + n; }
+function tick(){ var d=new Date(); document.getElementById("clock").textContent = pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds()); }
+setInterval(tick, 1000); tick();
+
+function check(label, ok, detail){
+  var row=document.createElement("div"); row.className="row";
+  row.innerHTML = "<span>"+label+"</span><span class='"+(ok?"ok":"bad")+"'>"+(ok?"예":"아니요")+(detail?" ("+detail+")":"")+"</span>";
+  document.getElementById("checks").appendChild(row);
+}
+var standalone = window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+check("홈 화면 앱(전체 화면)으로 실행", standalone);
+check("HTTPS 연결", location.protocol === "https:");
+check("서비스 워커 지원", "serviceWorker" in navigator);
+check("가로 방향", window.innerWidth > window.innerHeight, window.innerWidth + "×" + window.innerHeight);
+check("CSS gap(flex) 지원", CSS.supports("gap","1px"));
+check("Array.prototype.at 지원", typeof [].at === "function");
+check("structuredClone 지원", typeof structuredClone === "function");
+check("Intl 한국어 날짜", (function(){ try { return new Intl.DateTimeFormat("ko-KR",{weekday:"long"}).format(new Date()).length>0; } catch(e){ return false; } })());
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").then(function(){ log("서비스 워커 등록 성공. 다음 실행부터 오프라인 동작"); })
+    .catch(function(e){ log("서비스 워커 등록 실패: " + e); });
+}
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().then(function(p){ log("영구 저장 요청 결과: " + p); });
+}
+
+// localStorage
+function lsGet(){ try { return parseInt(localStorage.getItem("spikeCount")||"0",10); } catch(e){ return -1; } }
+function lsSet(v){ try { localStorage.setItem("spikeCount", String(v)); } catch(e){ log("localStorage 실패: "+e); } }
+document.getElementById("ls").textContent = lsGet();
+
+// IndexedDB
+var db = null;
+var req = indexedDB.open("spike", 1);
+req.onupgradeneeded = function(){ req.result.createObjectStore("kv"); };
+req.onsuccess = function(){ db = req.result; idbRead(); };
+req.onerror = function(){ document.getElementById("idb").textContent = "실패"; log("IndexedDB 실패: " + req.error); };
+function idbRead(){
+  var g = db.transaction("kv").objectStore("kv").get("count");
+  g.onsuccess = function(){ document.getElementById("idb").textContent = g.result || 0; };
+}
+function idbInc(){
+  var tx = db.transaction("kv","readwrite"), st = tx.objectStore("kv");
+  var g = st.get("count");
+  g.onsuccess = function(){ st.put((g.result||0)+1, "count"); };
+  tx.oncomplete = idbRead;
+}
+document.getElementById("inc").addEventListener("click", function(){
+  lsSet(lsGet()+1); document.getElementById("ls").textContent = lsGet();
+  if (db) idbInc();
+});
+
+// dictation
+var dict = document.getElementById("dict");
+try { document.getElementById("dictSaved").textContent = localStorage.getItem("spikeDict") || "-"; } catch(e){}
+dict.addEventListener("change", function(){
+  try { localStorage.setItem("spikeDict", dict.value); } catch(e){}
+  document.getElementById("dictSaved").textContent = dict.value; log("입력 저장: " + dict.value);
+});
+
+// weather
+fetch("https://api.open-meteo.com/v1/forecast?latitude=37.57&longitude=126.98&current=temperature_2m&timezone=Asia%2FSeoul")
+  .then(function(r){ return r.json(); })
+  .then(function(j){ document.getElementById("wx").textContent = j.current.temperature_2m + "°"; })
+  .catch(function(e){ document.getElementById("wx").textContent = "실패"; log("날씨 요청 실패: " + e); });
+
+log("페이지 시작. 버전 " + VERSION);
+</script>
+</body>
+</html>

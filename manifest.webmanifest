@@ -1,0 +1,14 @@
+{
+  "name": "할 일 보드",
+  "short_name": "할 일 보드",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#fff8ef",
+  "theme_color": "#e85a4f",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
