@@ -5,6 +5,7 @@ import KidBoardCore
 /// 보드 화면입니다. 위쪽은 공통 헤더, 아래쪽은 자녀 패널을 좌우로 놓습니다.
 struct BoardView: View {
     @ObservedObject var store: BoardStore
+    @ObservedObject var kiosk: KioskController
     @StateObject private var weather: WeatherViewModel
     private let clock: BoardClock
     @State private var showsParentMode = false
@@ -12,8 +13,9 @@ struct BoardView: View {
     /// 한 화면에 놓는 자녀 패널의 최대 수입니다.
     static let maxPanels = 2
 
-    init(store: BoardStore, clock: BoardClock = .live, weather: WeatherViewModel? = nil) {
+    init(store: BoardStore, kiosk: KioskController, clock: BoardClock = .live, weather: WeatherViewModel? = nil) {
         self.store = store
+        self.kiosk = kiosk
         self.clock = clock
         _weather = StateObject(wrappedValue: weather ?? WeatherViewModel(store: store, clock: clock, http: Self.http))
     }
@@ -27,7 +29,11 @@ struct BoardView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
-            content(now: clock.now())
+            let now = clock.now()
+            ZStack {
+                content(now: now)
+                overlays(now: now)
+            }
         }
         .background(BoardPalette.background.ignoresSafeArea())
         .preferredColorScheme(.light)
@@ -79,6 +85,27 @@ struct BoardView: View {
                 showsParentMode = true
             }
             .accessibilityLabel("부모 모드 (3초 길게 누르기)")
+    }
+
+    @ViewBuilder
+    private func overlays(now: Date) -> some View {
+        VStack(spacing: 0) {
+            if kiosk.showsGuidedAccessBanner {
+                GuidedAccessBannerView { kiosk.dismissGuidedAccessBanner() }
+                    .padding(.top, 14)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
+        if let days = kiosk.expiryDaysLeft {
+            ExpiryBadgeView(daysLeft: days)
+                .padding(.top, 6)
+                .padding(.trailing, 64)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        }
+        if kiosk.isNightDimmed {
+            NightOverlayView(now: now, calendar: store.calendar) { kiosk.userTouched(now: now) }
+        }
     }
 
     private func content(now: Date) -> some View {
@@ -154,7 +181,8 @@ struct BoardPreview {
     }
 
     func board() -> some View {
-        BoardView(store: store, clock: clock, weather: weather)
+        BoardView(store: store, kiosk: KioskController(store: store, clock: clock, profile: nil),
+                  clock: clock, weather: weather)
     }
 }
 

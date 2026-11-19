@@ -6,6 +6,7 @@ import KidBoardCore
 struct KidBoardApp: App {
     let container: ModelContainer
     @StateObject private var store: BoardStore
+    @StateObject private var kiosk: KioskController
 
     init() {
         let schema = Schema([
@@ -14,12 +15,15 @@ struct KidBoardApp: App {
         ])
         let container = try! ModelContainer(for: schema)
         self.container = container
-        _store = StateObject(wrappedValue: BoardStore(context: container.mainContext))
+        let store = BoardStore(context: container.mainContext)
+        _store = StateObject(wrappedValue: store)
+        _kiosk = StateObject(wrappedValue: KioskController(store: store))
     }
 
     var body: some Scene {
         WindowGroup {
-            BoardView(store: store)
+            BoardView(store: store, kiosk: kiosk)
+                .onAppear { kiosk.start() }
         }
         .modelContainer(container)
     }

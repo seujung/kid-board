@@ -86,6 +86,11 @@ final class BoardStore: ObservableObject {
         return created
     }
 
+    func setLastSeenProfileCreation(_ date: Date) {
+        settings().lastSeenProfileCreation = date
+        save()
+    }
+
     // MARK: PIN
 
     var hasPin: Bool { settings().pinHash != nil }
