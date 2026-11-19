@@ -184,7 +184,8 @@ struct AppSettingsInfo: Equatable {
     var locationName: String?
     var latitude: Double?
     var longitude: Double?
-    var lastSeenProfileCreation: Date?
+    var lastSeenInstallID: String?
+    var didSeed: Bool
 }
 
 @Model
@@ -198,7 +199,8 @@ final class AppSettingsModel {
     var locationAdmin1: String?
     var latitude: Double?
     var longitude: Double?
-    var lastSeenProfileCreation: Date?
+    /// 유도 접근 안내를 마지막으로 확인한 설치의 ID입니다. `KioskController.loadInstallID()`를 보십시오.
+    var lastSeenInstallID: String?
     /// 첫 실행 예시 데이터를 넣었으면 `true`입니다. 부모가 자녀를 모두 지워도 다시 넣지 않습니다.
     var didSeed: Bool = false
 
@@ -218,7 +220,7 @@ final class AppSettingsModel {
         AppSettingsInfo(
             pinHash: pinHash, pinSalt: pinSalt, lockout: lockout,
             locationName: locationName, latitude: latitude, longitude: longitude,
-            lastSeenProfileCreation: lastSeenProfileCreation
+            lastSeenInstallID: lastSeenInstallID, didSeed: didSeed
         )
     }
 }

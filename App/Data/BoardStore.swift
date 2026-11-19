@@ -103,8 +103,8 @@ final class BoardStore: ObservableObject {
         return created
     }
 
-    func setLastSeenProfileCreation(_ date: Date) {
-        settings().lastSeenProfileCreation = date
+    func setLastSeenInstallID(_ id: String) {
+        settings().lastSeenInstallID = id
         save()
     }
 

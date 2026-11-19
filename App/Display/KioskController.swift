@@ -53,6 +53,8 @@ final class KioskController: ObservableObject {
     private let store: BoardStore
     private let clock: BoardClock
     private let profile: (creation: Date, expiration: Date)?
+    /// 설치마다 바뀌는 값입니다. 유도 접근 안내를 띄울지 정합니다. 프로파일이 없으면(시뮬레이터) `nil`입니다.
+    private let installID: String?
     private var state: NightDimState
     private let screen: ScreenBrightness
     private let brightnessStore: PreDimBrightnessStore
@@ -68,11 +70,13 @@ final class KioskController: ObservableObject {
 
     init(store: BoardStore, clock: BoardClock = .live,
          profile: (creation: Date, expiration: Date)? = KioskController.loadProfile(),
+         installID: String? = KioskController.loadInstallID(),
          screen: ScreenBrightness? = nil,
          brightnessStore: PreDimBrightnessStore = PreDimBrightnessStore()) {
         self.store = store
         self.clock = clock
         self.profile = profile
+        self.installID = installID
         self.screen = screen ?? MainScreenBrightness()
         self.brightnessStore = brightnessStore
         self.state = NightDimState(calendar: store.calendar)
@@ -96,6 +100,27 @@ final class KioskController: ObservableObject {
         guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
               let data = try? Data(contentsOf: url) else { return nil }
         return ProvisioningProfile.dates(from: data)
+    }
+
+    /// 지금 설치의 ID를 만듭니다. 프로파일이 없으면 `nil`입니다.
+    ///
+    /// 재설치가 프로파일을 새로 받지 않아도(Xcode가 캐시한 무료 프로파일을 다시 써도) ID가 바뀌어야 합니다.
+    /// 그래서 세 값을 잇습니다. 하나라도 바뀌면 새 설치로 봅니다.
+    /// - 프로파일 생성일: Xcode가 프로파일을 새로 받으면 바뀝니다.
+    /// - 실행 파일 수정 시각: 빌드가 다시 서명하면 codesign이 실행 파일을 고쳐 씁니다.
+    /// - 번들 컨테이너 이름: iOS는 앱을 설치하거나 갱신할 때마다 새 컨테이너 UUID에 번들을 둡니다.
+    nonisolated static func loadInstallID() -> String? {
+        guard let profile = loadProfile() else { return nil }
+        let bundle = Bundle.main
+        let modified = bundle.executableURL
+            .flatMap { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
+        return installID(profileCreation: profile.creation, executableModified: modified,
+                         bundleContainer: bundle.bundleURL.deletingLastPathComponent().lastPathComponent)
+    }
+
+    nonisolated static func installID(profileCreation: Date, executableModified: Date?, bundleContainer: String) -> String {
+        let modified = executableModified.map { String($0.timeIntervalSince1970) } ?? "-"
+        return "\(profileCreation.timeIntervalSince1970)|\(modified)|\(bundleContainer)"
     }
 
     func start() {
@@ -142,7 +167,7 @@ final class KioskController: ObservableObject {
 
     func dismissGuidedAccessBanner() {
         showsGuidedAccessBanner = false
-        if let profile { store.setLastSeenProfileCreation(profile.creation) }
+        if let installID { store.setLastSeenInstallID(installID) }
     }
 
     // MARK: Private
@@ -182,12 +207,13 @@ final class KioskController: ObservableObject {
         evaluateGuidedAccess()
     }
 
-    private func evaluateGuidedAccess() {
-        guard GuidedAccessReminder.isEnabled, let profile else { return }
-        let seen = store.settings().lastSeenProfileCreation
+    /// 지난번에 본 설치 ID와 지금 설치 ID가 다르면 유도 접근 안내를 띄웁니다. 첫 실행이면 ID만 기록합니다.
+    func evaluateGuidedAccess() {
+        guard GuidedAccessReminder.isEnabled, let installID else { return }
+        let seen = store.settings().lastSeenInstallID
         if seen == nil {
-            store.setLastSeenProfileCreation(profile.creation)
-        } else if seen != profile.creation {
+            store.setLastSeenInstallID(installID)
+        } else if seen != installID {
             showsGuidedAccessBanner = true
         }
     }

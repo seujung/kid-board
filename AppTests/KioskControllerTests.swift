@@ -31,8 +31,8 @@ private struct Fixture {
         defaults = UserDefaults(suiteName: "KioskControllerTests-\(UUID().uuidString)")!
     }
 
-    func kiosk(_ screen: FakeScreen) -> KioskController {
-        KioskController(store: store, profile: nil, screen: screen,
+    func kiosk(_ screen: FakeScreen, installID: String? = nil) -> KioskController {
+        KioskController(store: store, profile: nil, installID: installID, screen: screen,
                         brightnessStore: PreDimBrightnessStore(defaults: defaults))
     }
 }
@@ -110,4 +110,41 @@ private struct Fixture {
     #expect(!kiosk.isNightDimmed)
     kiosk.evaluate(now: at(23, 1, 5))
     #expect(kiosk.isNightDimmed)
+}
+
+@MainActor @Test(.enabled(if: GuidedAccessReminder.isEnabled))
+func guidedAccessBannerFollowsInstallIdentity() throws {
+    let fixture = try Fixture()
+    let first = fixture.kiosk(FakeScreen(0.5), installID: "install-A")
+    first.evaluateGuidedAccess()
+    #expect(!first.showsGuidedAccessBanner)
+    #expect(fixture.store.settings().lastSeenInstallID == "install-A")
+
+    let sameInstall = fixture.kiosk(FakeScreen(0.5), installID: "install-A")
+    sameInstall.evaluateGuidedAccess()
+    #expect(!sameInstall.showsGuidedAccessBanner)
+
+    // 프로파일을 다시 쓰는 재설치도 실행 파일 수정 시각과 번들 경로가 바뀌므로 ID가 바뀝니다.
+    let reinstalled = fixture.kiosk(FakeScreen(0.5), installID: "install-B")
+    reinstalled.evaluateGuidedAccess()
+    #expect(reinstalled.showsGuidedAccessBanner)
+    reinstalled.dismissGuidedAccessBanner()
+    #expect(!reinstalled.showsGuidedAccessBanner)
+    #expect(fixture.store.settings().lastSeenInstallID == "install-B")
+
+    let relaunched = fixture.kiosk(FakeScreen(0.5), installID: "install-B")
+    relaunched.evaluateGuidedAccess()
+    #expect(!relaunched.showsGuidedAccessBanner)
+}
+
+@Test func installIDChangesWithAnyComponent() {
+    let creation = Date(timeIntervalSince1970: 1_000)
+    let mtime = Date(timeIntervalSince1970: 2_000)
+    let base = KioskController.installID(profileCreation: creation, executableModified: mtime, bundleContainer: "AAA")
+    #expect(base == KioskController.installID(profileCreation: creation, executableModified: mtime, bundleContainer: "AAA"))
+    #expect(base != KioskController.installID(profileCreation: creation, executableModified: mtime, bundleContainer: "BBB"))
+    #expect(base != KioskController.installID(profileCreation: creation, executableModified: mtime.addingTimeInterval(1),
+                                              bundleContainer: "AAA"))
+    #expect(base != KioskController.installID(profileCreation: creation.addingTimeInterval(1), executableModified: mtime,
+                                              bundleContainer: "AAA"))
 }
