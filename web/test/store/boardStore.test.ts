@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import type { DayDate } from "../../src/core/dayDate";
 import type { BoardData } from "../../src/core/domain";
 import type { WeatherSnapshot } from "../../src/core/weather";
-import { BoardStore, StoreReadOnlyError } from "../../src/store/boardStore";
+import { BoardStore, InvalidPinError, StoreReadOnlyError } from "../../src/store/boardStore";
 import { idbStorage } from "../../src/store/idb";
 import { emptyDoc } from "../../src/store/schema";
 import { defaultTimes, seedData } from "../../src/store/seed";
@@ -482,6 +482,34 @@ test("setPinReturnsRecoveryCodeThatResetsPin", async () => {
   await store.setPin("5678");
   expect(await store.verifyPin("5678")).toBe("ok");
   expect(await store.verifyPin("1234")).toBe("wrong");
+});
+
+test("changePinKeepsRecoveryCode", async () => {
+  const { store } = await makeStore(at(2026, 11, 19, 7));
+  const code = await store.setPin("1234");
+  for (let i = 0; i < 3; i++) await store.verifyPin("0000");
+  await store.changePin("5678");
+  expect(await store.verifyPin("5678")).toBe("ok");
+  expect(await store.verifyPin("1234")).toBe("wrong");
+  // 복구 코드는 그대로 씁니다(웹 설계 6.10.4).
+  expect(await store.verifyRecoveryCode(code)).toBe("ok");
+});
+
+test("changePinResetsPinLockout", async () => {
+  const { store } = await makeStore(at(2026, 11, 19, 7));
+  await store.setPin("1234");
+  for (let i = 0; i < 5; i++) await store.verifyPin("0000");
+  expect(store.settings().lockout.lockedUntil).not.toBeNull();
+  await store.changePin("5678");
+  expect(store.settings().lockout).toEqual({ failures: 0, lockedUntil: null });
+  expect(await store.verifyPin("5678")).toBe("ok");
+});
+
+test("changePinRejectsInvalidPin", async () => {
+  const { store } = await makeStore(at(2026, 11, 19, 7));
+  await store.setPin("1234");
+  await expect(store.changePin("12")).rejects.toThrow(InvalidPinError);
+  expect(await store.verifyPin("1234")).toBe("ok");
 });
 
 test("recoveryCodeSuccessKeepsCode", async () => {

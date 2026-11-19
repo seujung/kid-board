@@ -5,6 +5,7 @@ import { App } from "./ui/app";
 import "./styles.css";
 import "./ui/board/board.css";
 import "./ui/board/tasks.css";
+import "./ui/parent/parent.css";
 
 // 저장 공간을 지우지 않도록 요청합니다. 결과는 쓰지 않습니다(웹 설계 6.4.6).
 try {

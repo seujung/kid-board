@@ -379,6 +379,15 @@ export class BoardStore {
     return code;
   }
 
+  /** PIN만 바꾸고 PIN 잠금을 풉니다. 복구 코드는 그대로 둡니다(PIN 변경, 복구 코드로 PIN 다시 정하기). */
+  async changePin(pin: string): Promise<void> {
+    this.ensureWritable();
+    if (!isValidPin(pin)) throw new InvalidPinError();
+    const pinSalt = makeSalt();
+    const pinHash = await hashSecret(pin, pinSalt);
+    await this.commitSettings({ pinHash, pinSalt, lockout: recordSuccess() });
+  }
+
   /** 새 복구 코드를 만들어 원문을 돌려줍니다. 이전 코드는 쓸 수 없게 됩니다. */
   async regenerateRecoveryCode(): Promise<string> {
     this.ensureWritable();
