@@ -1,5 +1,17 @@
 #!/bin/zsh
 # Test stub: records its arguments to $STUB_LOG. Fails when STUB_FAIL=xcodebuild.
+# Sleeps 30 s when STUB_SLEEP=xcodebuild (for timeout tests).
+# Creates the built app with an embedded.mobileprovision under -derivedDataPath.
 print -r -- "xcodebuild $*" >> "${STUB_LOG:?STUB_LOG not set}"
+[[ "${STUB_SLEEP:-}" == "xcodebuild" ]] && sleep 30
 [[ "${STUB_FAIL:-}" == "xcodebuild" ]] && exit 1
+local -a args; args=("$@")
+local i derived=""
+for (( i = 1; i < ${#args}; i++ )); do
+  [[ "$args[i]" == "-derivedDataPath" ]] && derived="$args[i+1]"
+done
+if [[ -n "$derived" ]]; then
+  local app="$derived/Build/Products/Release-iphoneos/KidBoard.app"
+  mkdir -p "$app" && print "fake profile" > "$app/embedded.mobileprovision"
+fi
 exit 0

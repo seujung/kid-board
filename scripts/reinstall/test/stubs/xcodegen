@@ -1,5 +1,7 @@
 #!/bin/zsh
 # Test stub: records its arguments to $STUB_LOG. Fails when STUB_FAIL=xcodegen.
+# Sleeps 30 s when STUB_SLEEP=xcodegen (for timeout tests).
 print -r -- "xcodegen $*" >> "${STUB_LOG:?STUB_LOG not set}"
+[[ "${STUB_SLEEP:-}" == "xcodegen" ]] && sleep 30
 [[ "${STUB_FAIL:-}" == "xcodegen" ]] && exit 1
 exit 0

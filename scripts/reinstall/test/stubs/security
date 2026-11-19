@@ -1,0 +1,18 @@
+#!/bin/zsh
+# Test stub: records its arguments to $STUB_LOG. Fails when STUB_FAIL=security.
+# For "cms -D -i <file>" prints a profile plist whose ExpirationDate is
+# STUB_EXPIRY_DAYS (default 7) days from now.
+print -r -- "security $*" >> "${STUB_LOG:?STUB_LOG not set}"
+[[ "${STUB_FAIL:-}" == "security" ]] && exit 1
+local expiry; expiry="$(date -u -v+"${STUB_EXPIRY_DAYS:-7}"d +%Y-%m-%dT%H:%M:%SZ)"
+cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CreationDate</key><date>$(date -u +%Y-%m-%dT%H:%M:%SZ)</date>
+  <key>ExpirationDate</key><date>$expiry</date>
+</dict>
+</plist>
+PLIST
+exit 0
