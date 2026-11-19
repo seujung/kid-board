@@ -84,9 +84,6 @@
   padding: 10px 22px; border-radius: 999px; background: rgba(40, 32, 28, 0.92); color: #fff;
   font-size: 17px; font-weight: 700; white-space: nowrap; pointer-events: none;
 }
-.p-notice.inline {
-  position: static; transform: none; display: inline-block; margin: 8px 0; background: var(--p-ok);
-}
 .p-error { margin: 8px 0; color: var(--p-danger); font-size: 17px; font-weight: 800; }
 .p-error.small { flex-basis: 100%; margin: 0 0 0 56px; font-size: 15px; }
 .p-error-text { color: var(--p-danger); }
@@ -237,35 +234,6 @@
 /* 앱 최상위의 복원 입력 칸입니다. 화면 밖에 두어 자녀가 누를 수 없습니다. "백업에서 복원" label이 엽니다. */
 .restore-input { position: fixed; left: -10px; top: -10px; }
 
-/* PIN 화면 */
-.p-center {
-  flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 14px; padding: 16px; box-sizing: border-box;
-}
-.p-body > .p-center { min-height: 100%; }
-.pin-title { font-size: 30px; font-weight: 800; text-align: center; }
-.pin-subtitle { font-size: 20px; font-weight: 600; color: var(--p-muted); }
-.pin-dots { display: flex; gap: 28px; margin: 6px 0; }
-.pin-dot-group { display: flex; gap: 16px; }
-.pin-dot { width: 20px; height: 20px; box-sizing: border-box; border: 2px solid var(--ink); border-radius: 50%; }
-.pin-dot.filled { background: var(--ink); }
-.pin-message { min-height: 26px; font-size: 19px; font-weight: 800; color: var(--p-danger); text-align: center; }
-.pin-pad { display: flex; flex-wrap: wrap; width: 324px; gap: 14px; }
-.pin-pad.disabled { opacity: 0.35; }
-.pin-key, .pin-key-blank { width: 96px; height: 72px; }
-.pin-key {
-  border: 1px solid var(--p-line); border-radius: 18px; background: var(--p-card);
-  font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums;
-}
-.pin-key:active { background: #dcd3c3; }
-.pin-key.erase { font-size: 26px; }
-.pin-actions { display: flex; gap: 24px; min-height: 44px; }
-.recovery-code {
-  margin: 8px 0; padding: 16px 32px; border-radius: 18px; background: var(--p-card); border: 2px solid var(--p-line);
-  font-size: 56px; font-weight: 800; letter-spacing: 4px; font-variant-numeric: tabular-nums; white-space: nowrap;
-}
-.recovery-note { max-width: 560px; font-size: 20px; font-weight: 700; text-align: center; line-height: 1.5; }
-
 /* 확인 창 */
 .p-scrim {
   position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 110;
@@ -284,9 +252,8 @@
 /* 보드 헤더의 설정 아이콘. 날씨 카드와 겹치지 않도록 헤더 오른쪽 여백 안에 둡니다. */
 .settings-button {
   display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; padding: 0;
-  border: 0; background: none; color: #555; opacity: 0.6; touch-action: none;
+  border: 0; background: none; color: #555; opacity: 0.6; touch-action: manipulation;
   -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
 }
 .header.night .settings-button { color: #ddd; }
-.settings-button.pressed { opacity: 0.8; }
 .settings-icon { display: block; width: 32px; height: 32px; pointer-events: none; }

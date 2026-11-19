@@ -1,4 +1,3 @@
-export const LONG_PRESS_MS = 3000;
 export const IDLE_TIMEOUT_MS = 120000;
 export const SECURE_CONTEXT_MESSAGE = "보안 연결(HTTPS)에서만 PIN을 정할 수 있어요";
 

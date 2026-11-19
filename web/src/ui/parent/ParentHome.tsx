@@ -6,9 +6,7 @@ export type ParentScreen =
   | "sound"
   | "weather"
   | "history"
-  | "backup"
-  | "changePin"
-  | "recoveryCode";
+  | "backup";
 
 /** 메뉴 순서는 브리프에 정한 순서입니다. */
 export const PARENT_MENU: { screen: ParentScreen; title: string; icon: string }[] = [
@@ -20,8 +18,6 @@ export const PARENT_MENU: { screen: ParentScreen; title: string; icon: string }[
   { screen: "weather", title: "날씨 지역", icon: "🌤️" },
   { screen: "history", title: "완료 기록", icon: "📅" },
   { screen: "backup", title: "백업", icon: "💾" },
-  { screen: "changePin", title: "PIN 변경", icon: "🔒" },
-  { screen: "recoveryCode", title: "복구 코드 새로 만들기", icon: "🔑" },
 ];
 
 export function screenTitle(screen: ParentScreen): string {
@@ -40,7 +36,6 @@ export interface ParentHomeProps {
   update?: UpdateInfo;
   /** 마지막 백업 후 7일 이상 지났으면 그 날 수입니다. */
   backupOverdueDays: number | null;
-  notice: string | null;
   onOpen: (screen: ParentScreen) => void;
 }
 
@@ -61,11 +56,6 @@ export function ParentHome(props: ParentHomeProps) {
       </div>
       {props.backupOverdueDays !== null && (
         <div class="p-warning">백업한 지 {props.backupOverdueDays}일 지났어요</div>
-      )}
-      {props.notice && (
-        <div class="p-notice inline" role="status">
-          {props.notice}
-        </div>
       )}
       <div class="p-menu">
         {PARENT_MENU.map((item) => (

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { FORECAST, SHOTS, W, injectStorageFaults, open, panel, setFailSaves } from "./support";
+import { FORECAST, SHOTS, W, open, panel } from "./support";
 
 const THU_MORNING = "2026-11-19T07:42:00+09:00";
 const GEOCODING = JSON.parse(readFileSync(new URL("../fixtures/geocoding.json", import.meta.url), "utf8"));
@@ -14,23 +14,7 @@ const MENU = [
   "날씨 지역",
   "완료 기록",
   "백업",
-  "PIN 변경",
-  "복구 코드 새로 만들기",
 ];
-
-/** 설정 아이콘을 `ms` 동안 누르고 있다가 뗍니다. */
-async function pressSettings(page: Page, ms: number): Promise<void> {
-  const box = await page.locator(".settings-button").boundingBox();
-  if (!box) throw new Error("no settings button");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.waitForTimeout(ms);
-  await page.mouse.up();
-}
-
-async function typeDigits(page: Page, digits: string): Promise<void> {
-  for (const d of digits) await page.locator(".pin-pad").getByRole("button", { name: d, exact: true }).click();
-}
 
 /** 화면이 1024px 안에 들어가고 가로 스크롤이 없는지 봅니다. */
 async function expectNoHorizontalScroll(page: Page): Promise<void> {
@@ -45,23 +29,10 @@ async function expectNoHorizontalScroll(page: Page): Promise<void> {
   expect(widths.body).toBeLessThanOrEqual(0);
 }
 
-/** 처음 PIN을 정하고 복구 코드를 확인한 뒤 부모 모드 첫 화면까지 갑니다. 복구 코드를 돌려줍니다. */
-async function setUpPin(page: Page, pin: string, shots = false): Promise<string> {
-  await pressSettings(page, 3300);
-  await expect(page.locator(".pin-title")).toHaveText("새 PIN을 정해 주세요");
-  await expect(page.locator(".pin-subtitle")).toHaveText("PIN 4자리를 입력해 주세요");
-  if (shots) await page.screenshot({ path: `${SHOTS}/parent-pin-setup.png` });
-  await typeDigits(page, pin);
-  await expect(page.locator(".pin-subtitle")).toHaveText("한 번 더 입력해 주세요");
-  await typeDigits(page, pin);
-  const code = page.locator(".recovery-code");
-  await expect(code).toHaveText(/^[0-9]{4} [0-9]{4}$/);
-  await expect(page.locator(".recovery-note")).toHaveText("이 복구 코드를 따로 적어 두세요. 다시 보여 드리지 않아요.");
-  if (shots) await page.screenshot({ path: `${SHOTS}/parent-recovery-code.png` });
-  const text = (await code.textContent()) ?? "";
-  await page.getByRole("button", { name: "적어 두었어요" }).click();
+/** 설정 아이콘을 눌러 부모 모드 첫 화면을 엽니다. */
+async function openParent(page: Page): Promise<void> {
+  await page.locator(".settings-button").click();
   await expect(page.locator(".p-topbar-title")).toHaveText("부모 모드");
-  return text.replace(" ", "");
 }
 
 async function openMenu(page: Page, title: string): Promise<void> {
@@ -74,7 +45,7 @@ async function backToMenu(page: Page): Promise<void> {
   await expect(page.locator(".p-topbar-title")).toHaveText("부모 모드");
 }
 
-test("long press, PIN setup, add task, lockout", async ({ page }) => {
+test("one tap opens parent mode, add a task", async ({ page }) => {
   await open(page, THU_MORNING);
   await page.screenshot({ path: `${SHOTS}/parent-board-icon.png` });
 
@@ -89,13 +60,9 @@ test("long press, PIN setup, add task, lockout", async ({ page }) => {
     expect(card.x + card.width).toBeLessThanOrEqual(icon.x);
   }
 
-  // 1. 1초만 누르면 열리지 않습니다.
-  await pressSettings(page, 1000);
-  await page.waitForTimeout(2500);
-  await expect(page.locator(".parent")).toHaveCount(0);
-
-  // 2. 3초 누르면 PIN을 정하고 복구 코드를 봅니다.
-  await setUpPin(page, "1234", true);
+  // 1. 한 번 누르면 PIN 없이 바로 부모 모드가 열립니다.
+  await openParent(page);
+  await expect(page.locator(".pin-pad")).toHaveCount(0);
   const items = page.locator(".p-menu-title");
   await expect(items).toHaveText(MENU);
   await expect(page.locator(".p-version")).toContainText("현재 버전");
@@ -103,7 +70,7 @@ test("long press, PIN setup, add task, lockout", async ({ page }) => {
   await expectNoHorizontalScroll(page);
   await page.screenshot({ path: `${SHOTS}/parent-home.png` });
 
-  // 3. 할 일 관리에서 첫째의 아침 할 일 "이 닦기"를 더합니다.
+  // 2. 할 일 관리에서 첫째의 아침 할 일 "이 닦기"를 더합니다.
   await openMenu(page, "할 일 관리");
   await expect(page.locator(".p-segment-item.on")).toContainText("첫째");
   await expectNoHorizontalScroll(page);
@@ -121,64 +88,8 @@ test("long press, PIN setup, add task, lockout", async ({ page }) => {
   await expect(panel(page, 0).locator(".task-card", { hasText: "이 닦기" })).toHaveCount(1);
   await expect(panel(page, 1).locator(".task-card", { hasText: "이 닦기" })).toHaveCount(0);
 
-  // 4. 다시 열고 틀린 PIN을 5번 넣으면 잠깁니다.
-  await pressSettings(page, 3300);
-  await expect(page.locator(".pin-title")).toHaveText("PIN을 입력해 주세요");
-  await expect(page.getByRole("button", { name: "PIN을 잊었어요" })).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/parent-gate.png` });
-  await typeDigits(page, "0000");
-  await expect(page.locator(".pin-message")).toHaveText("PIN이 맞지 않아요");
-  for (let i = 0; i < 4; i++) {
-    await expect(page.locator(".pin-key").first()).toBeEnabled();
-    await typeDigits(page, "0000");
-  }
-  await expect(page.locator(".pin-message")).toHaveText("잠시 후 다시 해 주세요 (60초)");
-  await expect(page.locator(".pin-key").first()).toBeDisabled();
-  await page.screenshot({ path: `${SHOTS}/parent-locked.png` });
-  // 1초마다 남은 초를 다시 셉니다.
-  await expect(page.locator(".pin-message")).toHaveText("잠시 후 다시 해 주세요 (59초)", { timeout: 2500 });
-
-  // 잠금은 저장되므로 닫았다 다시 열어도 남아 있습니다.
-  await page.getByRole("button", { name: "닫기" }).click();
-  await pressSettings(page, 3300);
-  await expect(page.locator(".pin-message")).toHaveText(/잠시 후 다시 해 주세요 \(5[0-9]초\)/);
-});
-
-test("recovery code resets PIN and keeps the code", async ({ page }) => {
-  await open(page, THU_MORNING);
-  const code = await setUpPin(page, "1234");
-  await page.getByRole("button", { name: "보드로 돌아가기" }).click();
-
-  await pressSettings(page, 3300);
-  await page.getByRole("button", { name: "PIN을 잊었어요" }).click();
-  await expect(page.locator(".pin-title")).toHaveText("복구 코드를 입력해 주세요");
-  await expect(page.locator(".pin-dot")).toHaveCount(8);
-  const wrong = code === "00000000" ? "11111111" : "00000000";
-  await typeDigits(page, wrong);
-  await expect(page.locator(".pin-message")).toHaveText("복구 코드가 맞지 않아요");
-  await typeDigits(page, code.slice(0, 5));
-  await page.screenshot({ path: `${SHOTS}/parent-recovery-entry.png` });
-  await typeDigits(page, code.slice(5));
-  await expect(page.locator(".pin-title")).toHaveText("새 PIN을 정해 주세요");
-  await typeDigits(page, "5678");
-  await typeDigits(page, "5678");
-  // 복구 코드는 그대로 유지하므로 다시 보여 주지 않습니다.
-  await expect(page.locator(".p-topbar-title")).toHaveText("부모 모드");
-  await expect(page.locator(".recovery-code")).toHaveCount(0);
-  await page.getByRole("button", { name: "보드로 돌아가기" }).click();
-
-  await pressSettings(page, 3300);
-  await typeDigits(page, "1234");
-  await expect(page.locator(".pin-message")).toHaveText("PIN이 맞지 않아요");
-  await typeDigits(page, "5678");
-  await expect(page.locator(".p-topbar-title")).toHaveText("부모 모드");
-  await page.getByRole("button", { name: "보드로 돌아가기" }).click();
-
-  // 같은 복구 코드를 다시 쓸 수 있습니다.
-  await pressSettings(page, 3300);
-  await page.getByRole("button", { name: "PIN을 잊었어요" }).click();
-  await typeDigits(page, code);
-  await expect(page.locator(".pin-title")).toHaveText("새 PIN을 정해 주세요");
+  // 3. 다시 누르면 다시 바로 열립니다.
+  await openParent(page);
 });
 
 test("every parent screen fits 1024x768", async ({ page }) => {
@@ -193,7 +104,7 @@ test("every parent screen fits 1024x768", async ({ page }) => {
     return route.fulfill({ json: FORECAST, headers: { "access-control-allow-origin": "*" } });
   });
   await open(page, THU_MORNING);
-  await setUpPin(page, "1234");
+  await openParent(page);
 
   // 자녀 관리
   await openMenu(page, "자녀 관리");
@@ -399,25 +310,6 @@ test("every parent screen fits 1024x768", async ({ page }) => {
   );
   await backToMenu(page);
 
-  // PIN 변경
-  await openMenu(page, "PIN 변경");
-  await expect(page.locator(".pin-title")).toHaveText("지금 쓰는 PIN을 입력해 주세요");
-  await expect(page.getByRole("button", { name: "PIN을 잊었어요" })).toHaveCount(0);
-  await expectNoHorizontalScroll(page);
-  await page.screenshot({ path: `${SHOTS}/parent-change-pin.png` });
-  await typeDigits(page, "1234");
-  await expect(page.locator(".pin-title")).toHaveText("새 PIN을 정해 주세요");
-  await typeDigits(page, "4321");
-  await typeDigits(page, "4321");
-  await expect(page.locator(".p-notice")).toHaveText("PIN을 바꿨어요");
-
-  // 복구 코드 새로 만들기
-  await openMenu(page, "복구 코드 새로 만들기");
-  await page.getByRole("button", { name: "새로 만들기" }).click();
-  await expect(page.locator(".recovery-code")).toHaveText(/^[0-9]{4} [0-9]{4}$/);
-  await page.getByRole("button", { name: "적어 두었어요" }).click();
-  await expect(page.locator(".p-topbar-title")).toHaveText("부모 모드");
-
   // 지역을 바꾼 날씨가 보드에 보입니다.
   await page.getByRole("button", { name: "보드로 돌아가기" }).click();
   await expect(page.locator(".weather-sub")).toHaveText("송파구");
@@ -452,25 +344,13 @@ test("backup reminder after 7 days", async ({ page }) => {
   await expect(page.locator(".panel")).toHaveCount(2);
   // 보드에는 안내를 표시하지 않습니다.
   await expect(page.getByText("백업한 지")).toHaveCount(0);
-  await setUpPin(page, "1234");
+  await openParent(page);
   await expect(page.locator(".p-warning")).toHaveText("백업한 지 10일 지났어요");
   await page.screenshot({ path: `${SHOTS}/parent-home-backup-reminder.png` });
 });
 
 test("idle for 2 minutes returns to the board", async ({ page }) => {
-  await page.clock.install({ time: new Date(THU_MORNING) });
-  await page.goto("./");
-  await expect(page.locator(".panel")).toHaveCount(2);
-  const box = await page.locator(".settings-button").boundingBox();
-  if (!box) throw new Error("no settings button");
-  await page.mouse.move(box.x + 22, box.y + 22);
-  await page.mouse.down();
-  await page.clock.runFor(3100);
-  await page.mouse.up();
-  await expect(page.locator(".pin-title")).toHaveText("새 PIN을 정해 주세요");
-  await typeDigits(page, "1234");
-  await typeDigits(page, "1234");
-  await page.getByRole("button", { name: "적어 두었어요" }).click();
+  await openParentWithFakeClock(page);
   await openMenu(page, "할 일 관리");
   await page.locator(".p-add", { hasText: "아침 할 일 추가" }).click();
   await page.locator(".p-form input[type=text]").fill("저장 안 한 할 일");
@@ -486,60 +366,16 @@ test("idle for 2 minutes returns to the board", async ({ page }) => {
   await expect(page.getByText("저장 안 한 할 일")).toHaveCount(0);
 });
 
-test("a first PIN that fails to save shows the error, no recovery code, and no PIN", async ({ page }) => {
-  await injectStorageFaults(page, 0);
-  await open(page, THU_MORNING);
-  await setFailSaves(page, true);
-  await pressSettings(page, 3300);
-  await expect(page.locator(".pin-title")).toHaveText("새 PIN을 정해 주세요");
-  await typeDigits(page, "1234");
-  await typeDigits(page, "1234");
-  await expect(page.locator(".pin-message")).toHaveText("저장하지 못했어요. 다시 눌러 주세요.");
-  await expect(page.locator(".recovery-code")).toHaveCount(0);
-  await page.getByRole("button", { name: "닫기" }).click();
-  await expect(page.locator(".parent")).toHaveCount(0);
-  // 메모리에도 PIN이 없으므로 다시 열면 PIN을 처음부터 정합니다.
-  await setFailSaves(page, false);
-  await pressSettings(page, 3300);
-  await expect(page.locator(".pin-title")).toHaveText("새 PIN을 정해 주세요");
-});
-
-/** 시계를 멈춘 채 설정 아이콘을 3초 누르고 첫 PIN을 정합니다. 복구 코드 화면에서 멈춥니다. */
-async function setUpPinWithFakeClock(page: Page, pin: string): Promise<void> {
+/** 시계를 멈춘 채 설정 아이콘을 눌러 부모 모드를 엽니다. */
+async function openParentWithFakeClock(page: Page): Promise<void> {
   await page.clock.install({ time: new Date(THU_MORNING) });
   await page.goto("./");
   await expect(page.locator(".panel")).toHaveCount(2);
-  const box = await page.locator(".settings-button").boundingBox();
-  if (!box) throw new Error("no settings button");
-  await page.mouse.move(box.x + 22, box.y + 22);
-  await page.mouse.down();
-  await page.clock.runFor(3100);
-  await page.mouse.up();
-  await typeDigits(page, pin);
-  await typeDigits(page, pin);
-  await expect(page.locator(".recovery-code")).toBeVisible();
+  await openParent(page);
 }
 
 const IDLE_MS = 120_000;
 const CAP_MS = 600_000;
-
-test("idle timer pauses while a recovery code is shown", async ({ page }) => {
-  await setUpPinWithFakeClock(page, "1234");
-  await page.clock.runFor(5 * 60_000);
-  await expect(page.locator(".recovery-code")).toBeVisible();
-  await page.getByRole("button", { name: "적어 두었어요" }).click();
-  await expect(page.locator(".p-topbar-title")).toHaveText("부모 모드");
-
-  // 복구 코드 새로 만들기에서도 같습니다.
-  await openMenu(page, "복구 코드 새로 만들기");
-  await page.getByRole("button", { name: "새로 만들기" }).click();
-  await expect(page.locator(".recovery-code")).toBeVisible();
-  await page.clock.runFor(5 * 60_000);
-  await expect(page.locator(".recovery-code")).toBeVisible();
-  await page.getByRole("button", { name: "적어 두었어요" }).click();
-  await page.clock.runFor(IDLE_MS + 1000);
-  await expect(page.locator(".parent")).toHaveCount(0);
-});
 
 test("idle timer pauses while the share sheet is open, for at most 10 minutes", async ({ page }) => {
   await page.addInitScript(() => {
@@ -547,8 +383,7 @@ test("idle timer pauses while the share sheet is open, for at most 10 minutes", 
     // 부모가 공유 시트를 열어 둔 채로 둡니다.
     Object.defineProperty(navigator, "share", { configurable: true, value: () => new Promise(() => undefined) });
   });
-  await setUpPinWithFakeClock(page, "1234");
-  await page.getByRole("button", { name: "적어 두었어요" }).click();
+  await openParentWithFakeClock(page);
   await openMenu(page, "백업");
   await page.getByRole("button", { name: "백업 파일 저장" }).click();
   await page.clock.runFor(CAP_MS - 1000);
@@ -558,8 +393,7 @@ test("idle timer pauses while the share sheet is open, for at most 10 minutes", 
 });
 
 test("a backup file picked after parent mode closed still reaches the restore confirm", async ({ page }) => {
-  await setUpPinWithFakeClock(page, "1234");
-  await page.getByRole("button", { name: "적어 두었어요" }).click();
+  await openParentWithFakeClock(page);
   const backup = await page.evaluate(
     () =>
       new Promise<string>((resolve, reject) => {
@@ -587,10 +421,8 @@ test("a backup file picked after parent mode closed still reaches the restore co
   // iOS는 취소를 알려 주지 않으므로 10분 뒤에는 다시 세고, 2분 뒤에 닫습니다.
   await page.clock.runFor(5 * 60_000 + IDLE_MS + 1000);
   await expect(page.locator(".parent")).toHaveCount(0);
-  // 그 뒤에 고른 파일도 버리지 않습니다. PIN을 확인한 뒤 복원 확인 창이 나옵니다.
+  // 그 뒤에 고른 파일도 버리지 않습니다. 부모 모드를 다시 열고 복원 확인 창을 보여 줍니다.
   await chooser.setFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from(backup) });
-  await expect(page.locator(".pin-title")).toHaveText("PIN을 입력해 주세요");
-  await typeDigits(page, "1234");
   await expect(page.locator(".p-topbar-title")).toHaveText("백업");
   await expect(page.locator(".p-dialog-title")).toHaveText("지금 데이터를 백업 내용으로 바꿀까요?");
   await page.getByRole("button", { name: "바꾸기" }).click();
@@ -599,7 +431,7 @@ test("a backup file picked after parent mode closed still reaches the restore co
 
 test("screen-off period dims the board in the daytime", async ({ page }) => {
   await open(page, "2026-11-19T08:58:00+09:00");
-  await setUpPin(page, "1234");
+  await openParent(page);
   await openMenu(page, "화면 끄기 시간");
   await page.getByRole("button", { name: "구간 1 지우기" }).click();
   await page.locator(".p-add", { hasText: "구간 추가" }).click();

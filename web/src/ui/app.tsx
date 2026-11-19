@@ -101,7 +101,7 @@ export function App({ storage, clock, update, onStore }: AppProps) {
         clock={clock}
         trailing={(ctx) => {
           weather.current = ctx.weather;
-          return <SettingsButton onLongPress={() => setParentOpen(true)} />;
+          return <SettingsButton onOpen={() => setParentOpen(true)} />;
         }}
       />
       <NightOverlay clock={clock} parentOpen={parentOpen} store={store} />

@@ -2,7 +2,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   EMPTY_LOCKOUT,
   IDLE_TIMEOUT_MS,
-  LONG_PRESS_MS,
   SECURE_CONTEXT_MESSAGE,
   SecureContextError,
   hashSecret,
@@ -136,6 +135,5 @@ test("lockoutIsPure", () => {
 });
 
 test("parentGateConstants", () => {
-  expect(LONG_PRESS_MS).toBe(3000);
   expect(IDLE_TIMEOUT_MS).toBe(120000);
 });

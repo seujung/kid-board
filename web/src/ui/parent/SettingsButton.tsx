@@ -1,62 +1,10 @@
-import { useEffect, useRef, useState } from "preact/hooks";
-import { LONG_PRESS_MS } from "../../core/parentLock";
-
 /**
  * 보드 오른쪽 위의 설정 아이콘입니다. 32px 회색 아이콘, 누름 영역 64px입니다.
- * `LONG_PRESS_MS`(3초) 동안 계속 누르고 있어야 `onLongPress`를 부릅니다.
- * 손을 떼거나, 취소되거나, 버튼 밖으로 나가면 처음부터 다시 셉니다.
- * 포인터 이벤트를 쓰고, 없으면 터치·마우스 이벤트를 씁니다.
+ * 누르면 바로 `onOpen`을 불러 부모 모드를 엽니다.
  */
-export function SettingsButton({ onLongPress }: { onLongPress: () => void }) {
-  const timer = useRef(0);
-  const callback = useRef(onLongPress);
-  callback.current = onLongPress;
-  const [pressed, setPressed] = useState(false);
-
-  const cancel = () => {
-    window.clearTimeout(timer.current);
-    timer.current = 0;
-    setPressed(false);
-  };
-  const start = () => {
-    window.clearTimeout(timer.current);
-    setPressed(true);
-    timer.current = window.setTimeout(() => {
-      timer.current = 0;
-      setPressed(false);
-      callback.current();
-    }, LONG_PRESS_MS);
-  };
-  useEffect(() => () => window.clearTimeout(timer.current), []);
-
-  const pointer = typeof window !== "undefined" && "PointerEvent" in window;
-  const handlers = pointer
-    ? {
-        onPointerDown: (e: PointerEvent) => {
-          if (e.button > 0) return;
-          start();
-        },
-        onPointerUp: cancel,
-        onPointerCancel: cancel,
-        onPointerLeave: cancel,
-      }
-    : {
-        onTouchStart: start,
-        onTouchEnd: cancel,
-        onTouchCancel: cancel,
-        onMouseDown: start,
-        onMouseUp: cancel,
-        onMouseLeave: cancel,
-      };
-
+export function SettingsButton({ onOpen }: { onOpen: () => void }) {
   return (
-    <button
-      type="button"
-      class={pressed ? "settings-button pressed" : "settings-button"}
-      aria-label="설정 (3초 동안 누르기)"
-      onContextMenu={(e) => e.preventDefault()}
-      {...handlers}
-    >
+    <button type="button" class="settings-button" aria-label="설정" onClick={onOpen}>
       <svg class="settings-icon" width="32" height="32" viewBox="0 0 24 24" aria-hidden="true">
         <path
           fill="currentColor"
