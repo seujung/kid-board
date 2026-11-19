@@ -9,7 +9,11 @@ let package = Package(
     ],
     targets: [
         .target(name: "KidBoardCore"),
-        .testTarget(name: "KidBoardCoreTests", dependencies: ["KidBoardCore"])
+        .testTarget(
+            name: "KidBoardCoreTests",
+            dependencies: ["KidBoardCore"],
+            resources: [.copy("Fixtures")]
+        )
     ],
     swiftLanguageModes: [.v6]
 )
