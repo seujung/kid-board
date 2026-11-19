@@ -19,28 +19,8 @@ struct KidBoardApp: App {
 
     var body: some Scene {
         WindowGroup {
-            PlaceholderBoardView(store: store)
+            BoardView(store: store)
         }
         .modelContainer(container)
-    }
-}
-
-/// Task 9에서 보드 화면으로 바꿀 임시 화면입니다.
-struct PlaceholderBoardView: View {
-    @ObservedObject var store: BoardStore
-
-    var body: some View {
-        let calendar = store.calendar
-        let today = DayDate(Date(), calendar: calendar)
-        let data = store.snapshot()
-        let engine = ScheduleEngine(calendar: calendar)
-        List(data.children) { child in
-            HStack {
-                Text("\(child.avatar) \(child.name)")
-                Spacer()
-                Text("\(engine.tasks(childID: child.id, on: today, data: data).count)개")
-            }
-        }
-        .onAppear { store.seedIfEmpty(today: today) }
     }
 }
