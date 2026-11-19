@@ -67,11 +67,34 @@ function unlock(e: Event): void {
 }
 
 /**
+ * 공유 AudioContext를 닫고 버립니다. 다음 터치에서 새로 만들고 다시 잠금을 풉니다.
+ * iPadOS 15는 앱이 화면 뒤로 갔다 오면 기존 컨텍스트를 멈춘 채로 둘 수 있습니다.
+ * 이때는 `resume()`이 성공해도 소리가 나지 않으므로 컨텍스트를 새로 만듭니다.
+ */
+function discard(): void {
+  const ctx = shared;
+  shared = null;
+  unlocked = false;
+  if (!ctx) return;
+  try {
+    const p = ctx.close() as Promise<void> | undefined;
+    if (p && typeof p.catch === "function") p.catch(() => undefined);
+  } catch {
+    // 이미 닫혔습니다.
+  }
+}
+
+/**
  * 문서의 터치(`pointerdown`, `pointerup`, `touchend`)마다 AudioContext를 깨웁니다.
  * iPad가 잠기거나 다른 앱이 소리를 가져가면 멈출 수 있으므로 첫 터치 뒤에도 계속 듣습니다.
+ * 앱이 화면 뒤로 가면(`visibilitychange`가 hidden, `pagehide`) 컨텍스트를 버립니다.
  */
 export function installAudioUnlock(doc: Document = document): void {
   if (installed) return;
   installed = true;
   for (const type of ["pointerdown", "pointerup", "touchend"]) doc.addEventListener(type, unlock, { capture: true, passive: true });
+  doc.addEventListener("visibilitychange", () => {
+    if (doc.visibilityState === "hidden") discard();
+  });
+  doc.defaultView?.addEventListener("pagehide", discard);
 }

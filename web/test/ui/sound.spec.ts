@@ -9,7 +9,7 @@ import { open, panel } from "./support";
  */
 async function stubAudio(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    const log = { tones: [] as number[], masters: [] as number[], contexts: 0, resumes: 0, unlocks: 0 };
+    const log = { tones: [] as number[], masters: [] as number[], contexts: 0, resumes: 0, unlocks: 0, closes: 0 };
     (window as unknown as { __audio: typeof log }).__audio = log;
     class Param {
       value = 0;
@@ -47,6 +47,11 @@ async function stubAudio(page: Page): Promise<void> {
       destination = {};
       constructor() {
         log.contexts++;
+      }
+      close() {
+        log.closes++;
+        this.state = "closed";
+        return Promise.resolve();
       }
       resume() {
         log.resumes++;
@@ -122,6 +127,35 @@ test("completing chimes, the last task plays a fanfare, undo is silent", async (
   expect(await requested(page)).toEqual({ chime: 5, fanfare: 1 });
 });
 
+/** 앱이 화면 뒤로 갔다가(홈 화면, 다른 앱) 돌아온 것처럼 visibilitychange를 보냅니다. */
+async function leaveAndReturn(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const set = (v: string) => Object.defineProperty(document, "visibilityState", { configurable: true, get: () => v });
+    set("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    set("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+}
+
+test("leaving the app and coming back makes a new AudioContext on the next tap", async ({ page }) => {
+  await stubAudio(page);
+  await open(page, "2026-11-19T07:42:00+09:00");
+  const cards = panel(page, 0).locator(".task-card");
+  await cards.nth(0).click();
+  expect(await requested(page)).toEqual({ chime: 1, fanfare: 0 });
+
+  await leaveAndReturn(page);
+  const audio = () =>
+    page.evaluate(() => (window as unknown as { __audio: { contexts: number; closes: number } }).__audio);
+  // iOS가 멈춘 채로 두는 컨텍스트는 닫고, 다음 터치에서 새로 만듭니다.
+  expect(await audio()).toMatchObject({ contexts: 1, closes: 1 });
+  await cards.nth(1).click();
+  await expect(panel(page, 0).locator(".stamp")).toHaveCount(2);
+  expect(await audio()).toMatchObject({ contexts: 2, closes: 1 });
+  expect(await requested(page)).toEqual({ chime: 2, fanfare: 0 });
+});
+
 test("a tap that only shakes a card is silent", async ({ page }) => {
   await stubAudio(page);
   // 잘 준비 시각(21:30)이 지났지만 화면 끄기 시간(22:00) 전입니다.
@@ -135,18 +169,7 @@ test("a tap that only shakes a card is silent", async ({ page }) => {
 });
 
 async function openSoundSettings(page: Page): Promise<void> {
-  const box = await page.locator(".settings-button").boundingBox();
-  if (!box) throw new Error("no settings button");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.waitForTimeout(3300);
-  await page.mouse.up();
-  const digits = async () => {
-    for (const d of "1234") await page.locator(".pin-pad").getByRole("button", { name: d, exact: true }).click();
-  };
-  await digits();
-  await digits();
-  await page.getByRole("button", { name: "적어 두었어요" }).click();
+  await page.locator(".settings-button").click();
   await page.locator(".p-menu-item", { hasText: "소리" }).click();
   await expect(page.locator(".p-topbar-title")).toHaveText("소리");
 }
@@ -183,14 +206,7 @@ test("previews play at the chosen volume and turning sound off silences the boar
   // 다시 열어도 꺼져 있고 볼륨은 "작게"입니다.
   await page.reload();
   await expect(page.locator(".panel")).toHaveCount(2);
-  const box = await page.locator(".settings-button").boundingBox();
-  if (!box) throw new Error("no settings button");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.waitForTimeout(3300);
-  await page.mouse.up();
-  for (const d of "1234") await page.locator(".pin-pad").getByRole("button", { name: d, exact: true }).click();
-  await page.locator(".p-menu-item", { hasText: "소리" }).click();
+  await openSoundSettings(page);
   await expect(page.getByRole("switch", { name: "소리 켜기" })).toHaveAttribute("aria-checked", "false");
   await expect(page.locator(".p-segment-item.on")).toHaveText("작게");
 });
