@@ -32,6 +32,7 @@ test("exportExcludesSecrets", async () => {
   expect(parsed.data.children.length).toBe(2);
   expect(parsed.settings.location).toEqual(seongnam);
   expect(parsed.settings.dimPeriods).toEqual(store.settings().dimPeriods);
+  expect(parsed.settings.sound).toEqual(store.settings().sound);
 });
 
 test("exportThenParseRoundTrips", async () => {
@@ -107,4 +108,34 @@ test("restoreWithoutDimPeriodsUsesDefault", async () => {
   await target.setDimPeriods(SCHOOL);
   await target.restore(parsed.doc);
   expect(target.settings().dimPeriods).toEqual(emptyDoc().settings.dimPeriods);
+});
+
+test("restoreTakesSoundFromBackup", async () => {
+  const source = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID("src"));
+  await source.setSound({ enabled: false, volume: "low" });
+  const parsed = parseBackup(exportBackup(source.doc(), at(2026, 11, 19, 7)).json);
+  if (!parsed.ok) throw new Error("parse failed");
+  expect(parsed.doc.settings.sound).toEqual({ enabled: false, volume: "low" });
+  const target = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID());
+  await target.setSound({ enabled: true, volume: "high" });
+  await target.restore(parsed.doc);
+  expect(target.settings().sound).toEqual({ enabled: false, volume: "low" });
+});
+
+test("restoreWithoutSoundUsesDefault", async () => {
+  const old = JSON.parse(exportBackup(emptyDoc(), at(2026, 11, 19, 7)).json);
+  delete old.settings.sound;
+  const parsed = parseBackup(JSON.stringify(old));
+  if (!parsed.ok) throw new Error("parse failed");
+  const target = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID());
+  await target.setSound({ enabled: false, volume: "high" });
+  await target.restore(parsed.doc);
+  expect(target.settings().sound).toEqual({ enabled: true, volume: "medium" });
+});
+
+test("backupWithMalformedSoundStillRestores", () => {
+  const old = JSON.parse(exportBackup(emptyDoc(), at(2026, 11, 19, 7)).json);
+  old.settings.sound = { enabled: 1, volume: "max" };
+  const parsed = parseBackup(JSON.stringify(old));
+  expect(parsed.ok && parsed.doc.settings.sound).toEqual({ enabled: true, volume: "medium" });
 });

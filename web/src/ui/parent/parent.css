@@ -188,6 +188,20 @@
 
 /* 화면 끄기 시간 */
 .dim-row { gap: 12px; }
+
+/* 소리 */
+.sound-row { gap: 16px; padding: 8px 16px; }
+.sound-row .p-segment { margin-bottom: 0; }
+.p-switch {
+  position: relative; flex: none; width: 76px; height: 44px; padding: 0; border: 0; border-radius: 22px;
+  background: #d6cfc2; -webkit-transition: background 0.15s; transition: background 0.15s;
+}
+.p-switch.on { background: var(--p-ok); }
+.p-switch-knob {
+  position: absolute; top: 4px; left: 4px; width: 36px; height: 36px; border-radius: 18px; background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); -webkit-transition: -webkit-transform 0.15s; transition: transform 0.15s;
+}
+.p-switch.on .p-switch-knob { -webkit-transform: translateX(32px); transform: translateX(32px); }
 .dim-tilde { font-size: 20px; font-weight: 800; color: var(--p-muted); }
 .weekday-toggles.small { gap: 6px; margin-left: auto; }
 .weekday-toggles.small .weekday-toggle { width: 44px; height: 44px; font-size: 17px; }

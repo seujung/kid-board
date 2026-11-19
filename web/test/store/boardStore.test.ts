@@ -618,3 +618,20 @@ test("idbStorageRoundTrips", async () => {
   await storage.save({ ...doc, weather: snap });
   expect(await storage.load()).toEqual({ ...doc, weather: snap });
 });
+
+test("setSoundPersistsAndCopies", async () => {
+  const storage = idbStorage(freshDBName());
+  const store = await BoardStore.open(storage, () => at(2026, 11, 19, 7), counterID());
+  expect(store.settings().sound).toEqual({ enabled: true, volume: "medium" });
+  let count = 0;
+  store.subscribe(() => {
+    count += 1;
+  });
+  const sound = { enabled: false, volume: "high" as const };
+  await store.setSound(sound);
+  expect(count).toBe(1);
+  (sound as { enabled: boolean }).enabled = true;
+  expect(store.settings().sound).toEqual({ enabled: false, volume: "high" });
+  const reopened = await BoardStore.open(storage, () => at(2026, 11, 19, 7), counterID());
+  expect(reopened.settings().sound).toEqual({ enabled: false, volume: "high" });
+});

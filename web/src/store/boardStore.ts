@@ -17,7 +17,7 @@ import type { GeoPlace, WeatherSnapshot } from "../core/weather";
 import { changeSchedule } from "../core/scheduleEditor";
 import type { DocStorage } from "./idb";
 import { emptyDoc, migrate } from "./schema";
-import type { AppDoc, Settings } from "./schema";
+import type { AppDoc, Settings, SoundSettings } from "./schema";
 import { defaultTimes, seedData } from "./seed";
 
 export type StoreStatus = "ok" | "readOnlyError";
@@ -489,17 +489,22 @@ export class BoardStore {
     });
   }
 
+  /** 완료 소리 설정을 바꿉니다. */
+  async setSound(sound: SoundSettings): Promise<void> {
+    await this.commitSettings({ sound: { enabled: sound.enabled, volume: sound.volume } });
+  }
+
   async markBackedUp(): Promise<void> {
     await this.commitSettings({ lastBackupAt: this.now().getTime() });
   }
 
   /**
-   * 백업 내용으로 데이터·지역·화면 끄기 시간·날씨를 바꿉니다. 지금 기기의 PIN·복구 코드·잠금과 마지막 백업 시각은 유지합니다.
-   * 화면 끄기 시간이 없는 백업은 `migrate`가 기본값으로 채웁니다.
+   * 백업 내용으로 데이터·지역·화면 끄기 시간·소리·날씨를 바꿉니다. 지금 기기의 PIN·복구 코드·잠금과 마지막 백업 시각은 유지합니다.
+   * 화면 끄기 시간이나 소리가 없는 백업은 `migrate`가 기본값으로 채웁니다.
    */
   async restore(doc: AppDoc): Promise<void> {
     await this.commitSettings(
-      { location: doc.settings.location, didSeed: true, dimPeriods: doc.settings.dimPeriods },
+      { location: doc.settings.location, didSeed: true, dimPeriods: doc.settings.dimPeriods, sound: { ...doc.settings.sound } },
       { schemaVersion: doc.schemaVersion, data: doc.data, weather: doc.weather },
     );
   }

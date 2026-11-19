@@ -7,6 +7,7 @@ import { idbStorage } from "./store/idb";
 import { App } from "./ui/app";
 import { startServiceWorker } from "./ui/display/updates";
 import type { UpdateSource } from "./ui/display/updates";
+import { installAudioUnlock } from "./ui/sound/audio";
 import "./styles.css";
 import "./ui/board/board.css";
 import "./ui/board/tasks.css";
@@ -19,6 +20,9 @@ try {
 } catch {
   // 지원하지 않는 브라우저입니다.
 }
+
+// 첫 터치에서 완료 소리용 AudioContext를 깨웁니다(iPadOS Safari).
+installAudioUnlock();
 
 const clock = makeClock(window.location.search, import.meta.env.DEV);
 const storage = idbStorage();

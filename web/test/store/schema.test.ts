@@ -31,6 +31,7 @@ function validDoc() {
         { id: "d1", start: { hour: 9, minute: 0 }, end: { hour: 14, minute: 0 }, weekdays: [1, 2, 3, 4, 5] },
         { id: "d2", start: { hour: 23, minute: 30 }, end: { hour: 6, minute: 0 }, weekdays: [6, 7] },
       ],
+      sound: { enabled: false, volume: "high" },
     },
     weather: { temperature: 1, weatherCode: 2, high: 3, low: 0, precipitationProbability: 10, fetchedAt: 4 },
   };
@@ -57,6 +58,7 @@ test("emptyDocShape", () => {
     dimPeriods: [
       { id: "default-night", start: { hour: 22, minute: 0 }, end: { hour: 6, minute: 0 }, weekdays: [1, 2, 3, 4, 5, 6, 7] },
     ],
+    sound: { enabled: true, volume: "medium" },
   });
   expect(doc.weather).toBeNull();
   expect(emptyDoc().settings.dimPeriods).not.toBe(doc.settings.dimPeriods);
@@ -155,4 +157,44 @@ test("migrateRejectsBadStructure", () => {
     mutate(doc);
     expect([i, migrate(doc)]).toEqual([i, { ok: false, reason: "corrupt" }]);
   });
+});
+
+test("migrateFillsMissingSoundWithDefault", () => {
+  const raw = validDoc() as { settings: Record<string, unknown> };
+  delete raw.settings.sound;
+  const result = migrate(raw);
+  expect(result.ok && result.doc.settings.sound).toEqual({ enabled: true, volume: "medium" });
+  expect(result.ok && result.doc.schemaVersion).toBe(1);
+  expect(emptyDoc().settings.sound).not.toBe(emptyDoc().settings.sound);
+});
+
+test("migrateKeepsValidSound", () => {
+  for (const volume of ["low", "medium", "high"]) {
+    const raw = validDoc() as { settings: Record<string, unknown> };
+    raw.settings.sound = { enabled: true, volume };
+    const result = migrate(raw);
+    expect(result.ok && result.doc.settings.sound).toEqual({ enabled: true, volume });
+  }
+});
+
+test("migrateMalformedSoundFallsBackToDefaultWithoutCorrupt", () => {
+  const bad: unknown[] = [
+    null,
+    "on",
+    [],
+    {},
+    { enabled: "yes", volume: "low" },
+    { enabled: true, volume: "loud" },
+    { enabled: true },
+    { volume: "low" },
+  ];
+  for (const sound of bad) {
+    const raw = validDoc() as { settings: Record<string, unknown> };
+    raw.settings.sound = sound;
+    const result = migrate(raw);
+    expect([sound, result.ok]).toEqual([sound, true]);
+    expect(result.ok && result.doc.settings.sound).toEqual({ enabled: true, volume: "medium" });
+    // 다른 설정은 그대로 읽습니다.
+    expect(result.ok && result.doc.settings.dimPeriods).toEqual(validDoc().settings.dimPeriods);
+  }
 });

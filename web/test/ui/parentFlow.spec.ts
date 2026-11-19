@@ -10,6 +10,7 @@ const MENU = [
   "할 일 관리",
   "시각 설정",
   "화면 끄기 시간",
+  "소리",
   "날씨 지역",
   "완료 기록",
   "백업",
@@ -274,6 +275,22 @@ test("every parent screen fits 1024x768", async ({ page }) => {
   await backToMenu(page);
   await openMenu(page, "화면 끄기 시간");
   await expect(dimRows).toHaveCount(2);
+  await backToMenu(page);
+
+  // 소리: 켜기, 크기, 들어 보기, 안내 문구입니다.
+  await openMenu(page, "소리");
+  await expect(page.getByRole("switch", { name: "소리 켜기" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator(".p-segment-item")).toHaveText(["작게", "보통", "크게"]);
+  await expect(page.locator(".p-segment-item.on")).toHaveText("보통");
+  await expect(page.getByRole("button", { name: "띵 들어 보기" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "빵빠레 들어 보기" })).toBeVisible();
+  await expect(page.locator(".p-footnote")).toHaveText(
+    "iPad 음량 버튼과 제어 센터의 음소거 설정에 따라 소리가 작거나 들리지 않을 수 있어요.",
+  );
+  await expectNoHorizontalScroll(page);
+  const soundFits = await page.locator(".p-body").evaluate((el) => el.scrollHeight <= el.clientHeight);
+  expect(soundFits).toBe(true);
+  await page.screenshot({ path: `${SHOTS}/parent-sound.png` });
   await backToMenu(page);
 
   // 날씨 지역: 고르면 저장하고 보드의 날씨를 바로 다시 가져옵니다.

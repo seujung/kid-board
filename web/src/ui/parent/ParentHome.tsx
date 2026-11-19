@@ -3,6 +3,7 @@ export type ParentScreen =
   | "tasks"
   | "times"
   | "dim"
+  | "sound"
   | "weather"
   | "history"
   | "backup"
@@ -15,6 +16,7 @@ export const PARENT_MENU: { screen: ParentScreen; title: string; icon: string }[
   { screen: "tasks", title: "할 일 관리", icon: "✅" },
   { screen: "times", title: "시각 설정", icon: "⏰" },
   { screen: "dim", title: "화면 끄기 시간", icon: "🌙" },
+  { screen: "sound", title: "소리", icon: "🔔" },
   { screen: "weather", title: "날씨 지역", icon: "🌤️" },
   { screen: "history", title: "완료 기록", icon: "📅" },
   { screen: "backup", title: "백업", icon: "💾" },

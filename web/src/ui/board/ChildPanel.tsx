@@ -4,10 +4,13 @@ import { boardState, canToggle } from "../../core/boardState";
 import type { ChildBoardState } from "../../core/boardState";
 import { sameDay } from "../../core/dayDate";
 import type { DayDate } from "../../core/dayDate";
+import { isDimmed } from "../../core/displayPolicy";
 import type { BoardData } from "../../core/domain";
 import { timesOn } from "../../core/scheduleEngine";
 import type { ScheduledTask } from "../../core/scheduleEngine";
 import type { BoardStore } from "../../store/boardStore";
+import { completesPhase, soundFor } from "../sound/policy";
+import { playSound } from "../sound/sounds";
 import { CountdownCard } from "./CountdownCard";
 import { OtherDayList, TodayList, UndoDialog } from "./DayList";
 import { CELEBRATION_MS, Celebration } from "./Stamp";
@@ -85,11 +88,24 @@ export function ChildPanel({ store, clock, state, data, onSaveError }: ChildPane
     } catch (e) {
       pending = Promise.reject(e);
     }
-    // 메모리 변경은 바로 반영되므로 저장을 기다리지 않고 축하 여부를 정합니다.
-    if (completing) {
-      const after = boardState(child, clock.now(), store.snapshot());
-      if (after.doneTaskIDs.has(id) && after.remaining === 0 && after.visibleTasks.length > 0) celebrate();
-    }
+    // 메모리 변경은 바로 반영되므로 저장을 기다리지 않고 축하 여부와 소리를 정합니다.
+    // 저장이 실패해 되돌아가도 이미 낸 "띵"은 그대로 둡니다.
+    const now = clock.now();
+    const after = boardState(child, now, store.snapshot());
+    const nextDone = after.doneTaskIDs.has(id);
+    const settings = store.settings();
+    playSound(
+      soundFor({
+        prevDone: !completing,
+        nextDone,
+        remaining: after.remaining,
+        phaseTotal: after.visibleTasks.length,
+        dimmed: isDimmed(now, settings.dimPeriods),
+        enabled: settings.sound.enabled,
+      }),
+      settings.sound.volume,
+    );
+    if (completing && completesPhase(nextDone, after.remaining, after.visibleTasks.length)) celebrate();
     pending
       .then((ok) => {
         if (!ok) {

@@ -16,6 +16,19 @@ import type { GeoPlace, WeatherSnapshot } from "../core/weather";
 
 export const CURRENT_SCHEMA = 1;
 
+export type SoundVolume = "low" | "medium" | "high";
+export const SOUND_VOLUMES: SoundVolume[] = ["low", "medium", "high"];
+
+/** 할 일 완료 소리 설정입니다. */
+export interface SoundSettings {
+  enabled: boolean;
+  volume: SoundVolume;
+}
+
+export function defaultSound(): SoundSettings {
+  return { enabled: true, volume: "medium" };
+}
+
 export interface Settings {
   pinHash: string | null;
   pinSalt: string | null;
@@ -29,6 +42,8 @@ export interface Settings {
   lastBackupAt: number | null;
   /** 화면 끄기 시간입니다. 없던 문서는 기본값(매일 22:00~06:00)으로 읽습니다. 빈 배열이면 끄지 않습니다. */
   dimPeriods: DimPeriod[];
+  /** 완료 소리입니다. 없거나 형식이 틀리면 기본값(켜기, 보통)으로 읽습니다. */
+  sound: SoundSettings;
 }
 
 export interface AppDoc {
@@ -53,6 +68,7 @@ export function emptyDoc(): AppDoc {
       didSeed: false,
       lastBackupAt: null,
       dimPeriods: defaultDimPeriods(),
+      sound: defaultSound(),
     },
     weather: null,
   };
@@ -188,6 +204,23 @@ function dimPeriods(v: unknown): DimPeriod[] {
   return arr(v).map(dimPeriod);
 }
 
+function soundSettings(v: unknown): SoundSettings {
+  const o = obj(v);
+  const volume = o.volume === "low" || o.volume === "medium" || o.volume === "high" ? o.volume : fail();
+  return { enabled: bool(o.enabled), volume };
+}
+
+/** 소리 설정은 형식이 틀려도 문서를 손상으로 보지 않고 기본값으로 읽습니다. */
+function soundOrDefault(v: unknown): SoundSettings {
+  if (v === undefined) return defaultSound();
+  try {
+    return soundSettings(v);
+  } catch (e) {
+    if (e instanceof Invalid) return defaultSound();
+    throw e;
+  }
+}
+
 function weatherSnapshot(v: unknown): WeatherSnapshot {
   const o = obj(v);
   return {
@@ -213,6 +246,7 @@ function settings(v: unknown): Settings {
     didSeed: optional(o.didSeed, bool, false),
     lastBackupAt: optional(o.lastBackupAt, nullable(num), null),
     dimPeriods: optional(o.dimPeriods, dimPeriods, defaultDimPeriods()),
+    sound: soundOrDefault(o.sound),
   };
 }
 

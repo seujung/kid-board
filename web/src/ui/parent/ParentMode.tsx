@@ -17,6 +17,7 @@ import { RecoveryCodeShow } from "./RecoveryCodeShow";
 import { RecoveryEntry } from "./RecoveryEntry";
 import { RecoveryRegenerate } from "./RecoveryRegenerate";
 import type { RestorePick } from "./restorePick";
+import { SoundEditor } from "./SoundEditor";
 import { TasksEditor } from "./TasksEditor";
 import { TimesEditor } from "./TimesEditor";
 import { useIdle } from "./useIdle";
@@ -147,6 +148,9 @@ export function ParentMode(props: ParentModeProps) {
         break;
       case "dim":
         body = <DimPeriodsEditor store={store} />;
+        break;
+      case "sound":
+        body = <SoundEditor store={store} />;
         break;
       case "weather":
         body = <LocationPicker store={store} refreshWeather={props.refreshWeather} />;
