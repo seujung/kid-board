@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { jsonFetcher, searchPlaces } from "../../core/weather";
+import { findPlaces } from "../../core/regionSearch";
+import { jsonFetcher } from "../../core/weather";
 import type { Fetcher, GeoPlace } from "../../core/weather";
 import type { BoardStore } from "../../store/boardStore";
 import { ErrorLine, errorText } from "./common";
@@ -16,7 +17,10 @@ function samePlace(a: GeoPlace | null, b: GeoPlace): boolean {
   return a !== null && a.name === b.name && a.latitude === b.latitude && a.longitude === b.longitude;
 }
 
-/** 날씨 지역입니다. 검색해서 고르면 저장하고 보드의 날씨를 바로 다시 가져옵니다. */
+/**
+ * 날씨 지역입니다. 검색해서 고르면 저장하고 보드의 날씨를 바로 다시 가져옵니다.
+ * 검색은 내장 시·군·구 목록을 먼저 찾고, 결과가 적으면 Open-Meteo 결과를 붙입니다(`findPlaces`).
+ */
 export function LocationPicker(props: { store: BoardStore; refreshWeather: () => void; fetcher?: Fetcher }) {
   const { store } = props;
   const fetcher = props.fetcher ?? jsonFetcher;
@@ -39,7 +43,7 @@ export function LocationPicker(props: { store: BoardStore; refreshWeather: () =>
     if (!text) return;
     const id = ++searchID.current;
     setStatus({ kind: "searching" });
-    searchPlaces(fetcher, text).then(
+    findPlaces(fetcher, text).then(
       (found) => {
         if (id !== searchID.current) return;
         setResults(found);
@@ -75,7 +79,7 @@ export function LocationPicker(props: { store: BoardStore; refreshWeather: () =>
           class="p-input"
           type="search"
           value={query}
-          placeholder="지역 이름 (예: 성남)"
+          placeholder="지역 이름 (예: 송파구, 성남)"
           onInput={(e) => setQuery((e.currentTarget as HTMLInputElement).value)}
         />
         <button type="submit" class="p-button primary" disabled={query.trim() === ""}>

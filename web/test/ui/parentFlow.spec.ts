@@ -279,16 +279,33 @@ test("every parent screen fits 1024x768", async ({ page }) => {
   // 날씨 지역: 고르면 저장하고 보드의 날씨를 바로 다시 가져옵니다.
   await openMenu(page, "날씨 지역");
   await expect(page.locator(".p-current")).toHaveText("아직 정하지 않았어요");
-  await page.locator(".p-search input").fill("성남");
+  // 내장 목록을 먼저 보여 줍니다. 5개보다 적으면 Open-Meteo 결과를 뒤에 붙입니다.
+  await page.locator(".p-search input").fill("송파");
   await page.getByRole("button", { name: "검색" }).click();
-  await expect(page.locator(".place-result")).toHaveText(["서울특별시", "성남시, 경기도"]);
+  await expect(page.locator(".place-result")).toHaveText(["송파구, 서울특별시", "서울특별시", "성남시, 경기도"]);
   expect(geocodingCalls).toBe(1);
   await expectNoHorizontalScroll(page);
   await page.screenshot({ path: `${SHOTS}/parent-location.png` });
+  // 내장 결과가 5개 이상이면 네트워크를 쓰지 않습니다. 일반구는 시 이름을 붙여 보여 줍니다.
+  await page.locator(".p-search input").fill("성남");
+  await page.getByRole("button", { name: "검색" }).click();
+  await expect(page.locator(".place-result").first()).toHaveText("성남시, 경기도");
+  await expect(page.locator(".place-result", { hasText: "성남시 분당구, 경기도" })).toHaveCount(1);
+  expect(geocodingCalls).toBe(2);
+  await page.locator(".p-search input").fill("서울");
+  await page.getByRole("button", { name: "검색" }).click();
+  await expect(page.locator(".place-result")).toHaveCount(26);
+  await expect(page.locator(".place-result").first()).toHaveText("서울특별시");
+  expect(geocodingCalls).toBe(2);
+  await expectNoHorizontalScroll(page);
+  await page.screenshot({ path: `${SHOTS}/parent-location-seoul.png` });
+  await page.locator(".p-search input").fill("송파");
+  await page.getByRole("button", { name: "검색" }).click();
+  await expect(page.locator(".place-result").first()).toHaveText("송파구, 서울특별시");
   const before = forecastCalls;
-  await page.locator(".place-result", { hasText: "성남시" }).click();
-  await expect(page.locator(".p-status")).toHaveText("성남시, 경기도(으)로 바꿨어요. 날씨를 새로 가져와요.");
-  await expect(page.locator(".p-current")).toHaveText("성남시, 경기도");
+  await page.locator(".place-result", { hasText: "송파구" }).click();
+  await expect(page.locator(".p-status")).toHaveText("송파구, 서울특별시(으)로 바꿨어요. 날씨를 새로 가져와요.");
+  await expect(page.locator(".p-current")).toHaveText("송파구, 서울특별시");
   await expect.poll(() => forecastCalls).toBeGreaterThan(before);
   await backToMenu(page);
 
@@ -386,7 +403,7 @@ test("every parent screen fits 1024x768", async ({ page }) => {
 
   // 지역을 바꾼 날씨가 보드에 보입니다.
   await page.getByRole("button", { name: "보드로 돌아가기" }).click();
-  await expect(page.locator(".weather-sub")).toHaveText("성남시");
+  await expect(page.locator(".weather-sub")).toHaveText("송파구");
   await page.screenshot({ path: `${SHOTS}/parent-board-after.png` });
 });
 
