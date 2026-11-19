@@ -4,15 +4,9 @@ import { join, relative, sep } from "node:path";
 import { defineConfig, transformWithOxc } from "vite";
 import type { Plugin } from "vite";
 import preact from "@preact/preset-vite";
+import { appVersion } from "./scripts/appVersion";
 
 const BASE = "/kid-board/";
-
-/** 부모 모드에 표시하는 버전입니다. 예: "20261119-2055" (빌드한 Mac의 현지 시각) */
-function appVersion(): string {
-  const d = new Date();
-  const p = (n: number) => (n < 10 ? `0${n}` : String(n));
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
-}
 
 function listFiles(dir: string): string[] {
   const out: string[] = [];

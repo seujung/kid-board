@@ -32,7 +32,7 @@ export interface UpdateSource {
 
 /**
  * 서비스 워커를 등록하고 새 버전 적용을 관리합니다. 운영 빌드에서만 부릅니다.
- * - 새 워커가 `waiting`이면 "새 버전 있음"을 알립니다.
+ * - 새 워커가 `waiting`이면 "새 버전 있음"을 알립니다. 등록할 때 이미 설치 중인 워커도 지켜봅니다.
  * - 1분마다 `shouldApplyUpdate`를 확인하고, 참이면 워커에 `SKIP_WAITING`을 보냅니다.
  * - 워커가 바뀌면(`controllerchange`) 한 번만 다시 엽니다.
  */
@@ -86,13 +86,19 @@ export function startServiceWorker(clock: Clock, scriptUrl: string, scope: strin
   sw.register(scriptUrl, { scope }).then(
     (reg) => {
       // 이미 활성 워커가 있을 때 설치를 마친 워커만 새 버전입니다.
+      const track = (worker: ServiceWorker) => {
+        const check = () => {
+          if (worker.state === "installed" && reg.active && waiting !== worker) setWaiting(worker);
+        };
+        worker.addEventListener("statechange", check);
+        check();
+      };
       if (reg.waiting && reg.active) setWaiting(reg.waiting);
+      // 페이지를 열 때 브라우저가 새 sw.js를 찾으면 등록이 끝나기 전에 설치가 시작됩니다.
+      // 그때의 updatefound는 이미 지나갔으므로 설치 중인 워커를 직접 지켜봅니다.
+      if (reg.installing) track(reg.installing);
       reg.addEventListener("updatefound", () => {
-        const worker = reg.installing;
-        if (!worker) return;
-        worker.addEventListener("statechange", () => {
-          if (worker.state === "installed" && reg.active) setWaiting(worker);
-        });
+        if (reg.installing) track(reg.installing);
       });
       window.setInterval(() => {
         reg.update().catch(() => undefined);

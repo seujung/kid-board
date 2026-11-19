@@ -11,10 +11,13 @@
 
 ## 웹 앱 개발
 
+처음 받은 저장소에서는 `npx playwright test` 전에 `npx playwright install webkit`으로 WebKit 브라우저를 한 번 설치하십시오.
+
 ```bash
 cd web
 npm ci
 npm run dev
 npm test
+npx playwright install webkit
 npx playwright test
 ```
