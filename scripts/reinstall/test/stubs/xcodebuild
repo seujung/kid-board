@@ -1,0 +1,5 @@
+#!/bin/zsh
+# Test stub: records its arguments to $STUB_LOG. Fails when STUB_FAIL=xcodebuild.
+print -r -- "xcodebuild $*" >> "${STUB_LOG:?STUB_LOG not set}"
+[[ "${STUB_FAIL:-}" == "xcodebuild" ]] && exit 1
+exit 0

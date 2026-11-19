@@ -1,0 +1,5 @@
+#!/bin/zsh
+# Test stub: records its arguments to $STUB_LOG. Fails when STUB_FAIL=osascript.
+print -r -- "osascript $*" >> "${STUB_LOG:?STUB_LOG not set}"
+[[ "${STUB_FAIL:-}" == "osascript" ]] && exit 1
+exit 0

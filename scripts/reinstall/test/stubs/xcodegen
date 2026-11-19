@@ -1,0 +1,5 @@
+#!/bin/zsh
+# Test stub: records its arguments to $STUB_LOG. Fails when STUB_FAIL=xcodegen.
+print -r -- "xcodegen $*" >> "${STUB_LOG:?STUB_LOG not set}"
+[[ "${STUB_FAIL:-}" == "xcodegen" ]] && exit 1
+exit 0

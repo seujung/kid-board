@@ -1,0 +1,5 @@
+#!/bin/zsh
+# Test stub: records its arguments to $STUB_LOG. Fails when STUB_FAIL=xcrun.
+print -r -- "xcrun $*" >> "${STUB_LOG:?STUB_LOG not set}"
+[[ "${STUB_FAIL:-}" == "xcrun" ]] && exit 1
+exit 0
