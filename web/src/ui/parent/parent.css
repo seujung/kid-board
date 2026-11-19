@@ -257,10 +257,10 @@
 
 /* 보드 헤더의 설정 아이콘. 날씨 카드와 겹치지 않도록 헤더 오른쪽 여백 안에 둡니다. */
 .settings-button {
-  display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0;
-  border: 0; background: none; color: #555; opacity: 0.45; touch-action: none;
+  display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; padding: 0;
+  border: 0; background: none; color: #555; opacity: 0.6; touch-action: none;
   -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
 }
 .header.night .settings-button { color: #ddd; }
 .settings-button.pressed { opacity: 0.8; }
-.settings-icon { display: block; width: 18px; height: 18px; pointer-events: none; }
+.settings-icon { display: block; width: 32px; height: 32px; pointer-events: none; }

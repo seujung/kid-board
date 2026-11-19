@@ -76,13 +76,13 @@ test("long press, PIN setup, add task, lockout", async ({ page }) => {
   await open(page, THU_MORNING);
   await page.screenshot({ path: `${SHOTS}/parent-board-icon.png` });
 
-  // 설정 아이콘은 날씨 카드와 겹치지 않고 44px 누름 영역을 가집니다.
+  // 설정 아이콘은 날씨 카드와 겹치지 않고 64px 누름 영역을 가집니다.
   const icon = await page.locator(".settings-button").boundingBox();
   const card = await page.locator(".weather-card").boundingBox();
   expect(icon && card).toBeTruthy();
   if (icon && card) {
-    expect(icon.width).toBe(44);
-    expect(icon.height).toBe(44);
+    expect(icon.width).toBe(64);
+    expect(icon.height).toBe(64);
     expect(icon.x + icon.width).toBeLessThanOrEqual(W);
     expect(card.x + card.width).toBeLessThanOrEqual(icon.x);
   }
