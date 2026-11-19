@@ -5,7 +5,8 @@ import { WEEKDAY_KO } from "../../core/domain";
 import type { BoardData, Weekday } from "../../core/domain";
 import type { BoardStore } from "../../store/boardStore";
 import { ChildPicker, ErrorLine, Notice, errorText, useNotice } from "./common";
-import { ALL_WEEKDAYS, parseTimeValue, timeValue } from "./format";
+import { ALL_WEEKDAYS, timeValue } from "./format";
+import { TimeSelect } from "./TimeSelect";
 
 export const TIMES_ERROR_TEXT = "잘 준비 시각은 등교 시각보다 늦어야 해요";
 const DEFAULT_SCHOOL: TimeOfDay = { hour: 8, minute: 30 };
@@ -124,30 +125,20 @@ export function TimesEditor({ store }: { store: BoardStore }) {
               </label>
               <span class="times-field">
                 {d.school !== null ? (
-                  <input
-                    class="p-input time"
-                    type="time"
-                    aria-label={`${WEEKDAY_KO[day]} 등교 시각`}
-                    value={timeValue(d.school)}
-                    onChange={(e) => {
-                      const t = parseTimeValue((e.currentTarget as HTMLInputElement).value);
-                      if (t) update(day, { ...d, school: t });
-                    }}
+                  <TimeSelect
+                    label={`${WEEKDAY_KO[day]} 등교 시각`}
+                    value={d.school}
+                    onChange={(t) => update(day, { ...d, school: t })}
                   />
                 ) : (
                   <span class="p-row-sub">등교 안 함</span>
                 )}
               </span>
               <span class="times-label">잘 준비</span>
-              <input
-                class="p-input time"
-                type="time"
-                aria-label={`${WEEKDAY_KO[day]} 잘 준비 시각`}
-                value={timeValue(d.bed)}
-                onChange={(e) => {
-                  const t = parseTimeValue((e.currentTarget as HTMLInputElement).value);
-                  if (t) update(day, { ...d, bed: t });
-                }}
+              <TimeSelect
+                label={`${WEEKDAY_KO[day]} 잘 준비 시각`}
+                value={d.bed}
+                onChange={(t) => update(day, { ...d, bed: t })}
               />
               {!isValid(d) && <span class="p-error small">{TIMES_ERROR_TEXT}</span>}
             </div>

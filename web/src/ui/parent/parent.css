@@ -150,7 +150,12 @@
   border-radius: 12px; background: var(--p-card); font-size: 20px; -webkit-appearance: none; appearance: none;
 }
 .p-input:focus { outline: 2px solid var(--p-accent); outline-offset: 0; }
-.p-input.time { min-height: 48px; width: 132px; font-size: 19px; }
+.time-select { display: inline-flex; gap: 6px; }
+.p-select {
+  min-height: 48px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--p-line);
+  border-radius: 12px; background: var(--p-card); font: inherit; font-size: 19px; color: inherit;
+  min-width: 80px; text-align: center; text-align-last: center; -webkit-appearance: none; appearance: none;
+}
 /* 아바타 16개는 8개씩 2줄, 할 일 아이콘 24개는 12개씩 2줄입니다. */
 .emoji-grid { display: flex; flex-wrap: wrap; gap: 8px; max-width: 504px; }
 .emoji-grid.wide { max-width: 760px; }
@@ -178,7 +183,7 @@
 .times-day { width: 40px; font-size: 22px; font-weight: 800; text-align: center; }
 .p-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 18px; font-weight: 700; }
 .p-check input { width: 26px; height: 26px; margin: 0; }
-.times-field { width: 140px; }
+.times-field { width: 190px; }
 .times-label { margin-left: auto; font-size: 18px; font-weight: 700; }
 
 /* 지역 */

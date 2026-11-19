@@ -216,8 +216,8 @@ test("every parent screen fits 1024x768", async ({ page }) => {
   await expect(page.locator(".times-row")).toHaveCount(7);
   await expectNoHorizontalScroll(page);
   await page.screenshot({ path: `${SHOTS}/parent-times.png` });
-  const bed = page.getByLabel("월 잘 준비 시각");
-  await bed.fill("07:00");
+  const bedHour = page.getByLabel("월 잘 준비 시각 시", { exact: true });
+  await bedHour.selectOption("7");
   await expect(page.locator(".times-row").first().locator(".p-error")).toHaveText("잘 준비 시각은 등교 시각보다 늦어야 해요");
   await expect(page.getByRole("button", { name: "저장" })).toBeDisabled();
   await page.screenshot({ path: `${SHOTS}/parent-times-error.png` });
@@ -225,7 +225,8 @@ test("every parent screen fits 1024x768", async ({ page }) => {
   await page.locator(".p-segment-item", { hasText: "둘째" }).click();
   await expect(page.locator(".p-error")).toHaveText("잘 준비 시각은 등교 시각보다 늦어야 해요");
   await page.locator(".p-segment-item", { hasText: "첫째" }).click();
-  await bed.fill("21:00");
+  await bedHour.selectOption("21");
+  await page.getByLabel("월 잘 준비 시각 분", { exact: true }).selectOption("0");
   await expect(page.locator(".p-error")).toHaveCount(0);
   await page.getByRole("button", { name: "저장" }).click();
   await expect(page.locator(".p-notice")).toHaveText("저장했어요");
