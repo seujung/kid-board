@@ -35,3 +35,16 @@ export function counterID(prefix = "id"): () => string {
     return `${prefix}${String(n).padStart(4, "0")}`;
   };
 }
+
+/** `failing`이 참인 동안 저장을 거부하는 메모리 저장소입니다. `failNext`만큼은 한 번씩 거부합니다. */
+export class FlakyStorage extends MemoryStorage {
+  failing = false;
+  failNext = 0;
+  async save(doc: AppDoc): Promise<void> {
+    if (this.failing || this.failNext > 0) {
+      if (this.failNext > 0) this.failNext -= 1;
+      throw new Error("save failed");
+    }
+    await super.save(doc);
+  }
+}

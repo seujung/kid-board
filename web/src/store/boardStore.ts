@@ -53,6 +53,10 @@ export function defaultNewID(): string {
   return randomHexID();
 }
 
+function logSaveError(err: unknown): void {
+  console.warn("lockout state was not saved", err);
+}
+
 function moveItem<T>(items: T[], from: number, to: number): T[] {
   const result = items.slice();
   if (from < 0 || from >= result.length) return result;
@@ -78,6 +82,8 @@ export class BoardStore {
   readonly errorReason: "corrupt" | "future" | "loadFailed" | null;
 
   private current: AppDoc;
+  /** 마지막으로 저장에 성공한 문서입니다. 저장이 실패하면 메모리를 이 문서로 되돌립니다. */
+  private persisted: AppDoc;
   private cache: BoardData | null = null;
   private listeners = new Set<() => void>();
   private saveChain: Promise<void> = Promise.resolve();
@@ -90,6 +96,7 @@ export class BoardStore {
     errorReason: "corrupt" | "future" | "loadFailed" | null,
   ) {
     this.current = doc;
+    this.persisted = doc;
     this.errorReason = errorReason;
     this.status = errorReason === null ? "ok" : "readOnlyError";
   }
@@ -153,15 +160,40 @@ export class BoardStore {
     if (this.status !== "ok") throw new StoreReadOnlyError();
   }
 
-  /** 새 문서로 바꾸고 저장을 줄에 세운 뒤 알립니다. */
+  /**
+   * 새 문서로 바꾸고 저장을 줄에 세운 뒤 알립니다.
+   * 저장이 실패하면 그 뒤에 다른 변경이 없을 때만 메모리를 마지막으로 저장된 문서로 되돌리고 다시 알립니다.
+   * 뒤에 다른 변경이 있으면 그 변경의 저장이 전체 문서를 쓰므로 메모리를 그대로 둡니다.
+   * PIN과 복구 코드의 잠금 상태는 되돌리지 않습니다. 저장이 계속 실패해도 틀린 횟수가 쌓여야 하기 때문입니다.
+   */
   private commit(next: AppDoc): Promise<void> {
     this.ensureWritable();
     this.current = next;
     this.cache = null;
     const saving = this.saveChain.then(() => this.storage.save(next));
-    this.saveChain = saving.catch(() => undefined);
+    this.saveChain = saving.then(
+      () => {
+        this.persisted = next;
+      },
+      () => undefined,
+    );
+    this.notify();
+    return saving.catch((err: unknown) => {
+      if (this.current === next) {
+        const keep = this.current.settings;
+        this.current = {
+          ...this.persisted,
+          settings: { ...this.persisted.settings, lockout: keep.lockout, recoveryLockout: keep.recoveryLockout },
+        };
+        this.cache = null;
+        this.notify();
+      }
+      throw err;
+    });
+  }
+
+  private notify(): void {
     this.listeners.forEach((fn) => fn());
-    return saving;
   }
 
   private commitData(change: (data: BoardData) => BoardData): Promise<void> {
@@ -425,11 +457,15 @@ export class BoardStore {
     const now = this.now().getTime();
     const latest = this.current.settings[lockKey];
     if (matches) {
-      await this.commitSettings({ [lockKey]: recordSuccess() });
+      // 잠금을 푸는 저장이 실패해도 맞는 PIN은 받아들입니다. 메모리의 잠금은 이미 풀렸습니다.
+      if (latest.failures !== 0 || latest.lockedUntil !== null) {
+        await this.commitSettings({ [lockKey]: recordSuccess() }).catch(logSaveError);
+      }
       return "ok";
     }
     const next = recordFailure(latest, now);
-    await this.commitSettings({ [lockKey]: next });
+    // 저장이 실패해도 틀린 횟수는 메모리에 남깁니다.
+    await this.commitSettings({ [lockKey]: next }).catch(logSaveError);
     return isLocked(next, now) ? { lockedUntil: next.lockedUntil as number } : "wrong";
   }
 
