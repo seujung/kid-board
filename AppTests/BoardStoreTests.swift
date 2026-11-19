@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftData
 import Testing
@@ -117,4 +118,23 @@ private func morningTask(_ data: BoardData) -> (child: UUID, task: UUID) {
     let a = after.schedules.first { $0.taskID == source.id }!
     let b = after.schedules.first { $0.taskID == newID }!
     #expect(a.slot == b.slot && a.weekdays == b.weekdays)
+}
+
+@MainActor @Test func mutationsNotifyObservers() throws {
+    let store = try makeStore()
+    var count = 0
+    let subscription = store.objectWillChange.sink { count += 1 }
+    defer { subscription.cancel() }
+
+    store.seedIfEmpty(today: wed)
+    #expect(count == 1)
+    store.seedIfEmpty(today: wed)
+    #expect(count == 1)
+
+    let data = store.snapshot()
+    let (child, task) = morningTask(data)
+    #expect(store.toggleCompletion(childID: child, taskID: task, now: date(11, 19, 7)))
+    #expect(count == 2)
+    #expect(!store.toggleCompletion(childID: child, taskID: task, now: date(11, 19, 8, 30)))
+    #expect(count == 2)
 }

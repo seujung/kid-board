@@ -27,8 +27,19 @@ final class BoardStore: ObservableObject {
         (try? context.fetch(FetchDescriptor<T>())) ?? []
     }
 
+    /// 여러 변경을 묶을 때 알림을 한 번만 보내기 위한 중첩 깊이입니다.
+    private var batchDepth = 0
+
     private func save() {
         try? context.save()
+        if batchDepth == 0 { objectWillChange.send() }
+    }
+
+    private func batch(_ body: () -> Void) {
+        batchDepth += 1
+        body()
+        batchDepth -= 1
+        save()
     }
 
     private func taskModel(_ id: UUID) -> TaskModel? {
@@ -64,7 +75,7 @@ final class BoardStore: ObservableObject {
         if let existing = all(AppSettingsModel.self).first { return existing }
         let created = AppSettingsModel()
         context.insert(created)
-        save()
+        try? context.save()
         return created
     }
 
@@ -72,6 +83,7 @@ final class BoardStore: ObservableObject {
 
     func seedIfEmpty(today: DayDate) {
         guard all(ChildModel.self).isEmpty else { return }
+        batch {
         for (index, seed) in SeedData.children.enumerated() {
             let childID = addChild(name: seed.name, avatar: seed.avatar, themeColor: seed.themeColor)
             if let child = all(ChildModel.self).first(where: { $0.id == childID }) { child.order = index }
@@ -85,7 +97,7 @@ final class BoardStore: ObservableObject {
                             slot: task.slot, weekdays: task.weekdays, today: today)
             }
         }
-        save()
+        }
     }
 
     // MARK: Children
