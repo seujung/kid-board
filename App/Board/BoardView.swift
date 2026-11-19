@@ -163,12 +163,7 @@ struct BoardPreview {
     var data: BoardData { store.snapshot() }
 
     init(now: Date) {
-        let schema = Schema([
-            ChildModel.self, TaskModel.self, TaskScheduleModel.self, DailyTimesModel.self,
-            CompletionModel.self, AppSettingsModel.self, WeatherCacheModel.self,
-        ])
-        let container = try! ModelContainer(
-            for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let container = try! KidBoardContainer.make(inMemory: true)
         store = BoardStore(context: ModelContext(container))
         clock = BoardClock(fixedStart: now)
         self.now = now

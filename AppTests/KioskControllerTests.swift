@@ -26,12 +26,7 @@ private struct Fixture {
     let defaults: UserDefaults
 
     init() throws {
-        let container = try ModelContainer(
-            for: Schema([
-                ChildModel.self, TaskModel.self, TaskScheduleModel.self, DailyTimesModel.self,
-                CompletionModel.self, AppSettingsModel.self, WeatherCacheModel.self,
-            ]),
-            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let container = try KidBoardContainer.make(inMemory: true)
         store = BoardStore(context: ModelContext(container), calendar: seoul)
         defaults = UserDefaults(suiteName: "KioskControllerTests-\(UUID().uuidString)")!
     }

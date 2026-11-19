@@ -20,11 +20,7 @@ private let wed = DayDate(year: 2026, month: 11, day: 18)
 
 @MainActor
 private func makeStore() throws -> BoardStore {
-    let schema = Schema([
-        ChildModel.self, TaskModel.self, TaskScheduleModel.self, DailyTimesModel.self,
-        CompletionModel.self, AppSettingsModel.self, WeatherCacheModel.self,
-    ])
-    let container = try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let container = try KidBoardContainer.make(inMemory: true)
     return BoardStore(context: ModelContext(container), calendar: seoul)
 }
 
@@ -143,11 +139,7 @@ private func morningTask(_ data: BoardData) -> (child: UUID, task: UUID) {
 
 @MainActor
 private func makeContainer() throws -> ModelContainer {
-    let schema = Schema([
-        ChildModel.self, TaskModel.self, TaskScheduleModel.self, DailyTimesModel.self,
-        CompletionModel.self, AppSettingsModel.self, WeatherCacheModel.self,
-    ])
-    return try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    try KidBoardContainer.make(inMemory: true)
 }
 
 @MainActor @Test func pinSetAndVerify() throws {
