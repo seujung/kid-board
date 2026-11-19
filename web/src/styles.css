@@ -58,6 +58,19 @@ button {
   opacity: 0.8;
 }
 
+.full-message-button {
+  margin-top: 28px;
+  min-width: 200px;
+  min-height: 56px;
+  padding: 0 28px;
+  border: none;
+  border-radius: 16px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 22px;
+  font-weight: 800;
+}
+
 .toast {
   position: fixed;
   left: 50%;

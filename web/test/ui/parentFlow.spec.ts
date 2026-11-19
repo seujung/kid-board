@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { FORECAST, SHOTS, W, open, panel } from "./support";
+import { FORECAST, SHOTS, W, injectStorageFaults, open, panel, setFailSaves } from "./support";
 
 const THU_MORNING = "2026-11-19T07:42:00+09:00";
 const GEOCODING = JSON.parse(readFileSync(new URL("../fixtures/geocoding.json", import.meta.url), "utf8"));
@@ -405,4 +405,115 @@ test("idle for 2 minutes returns to the board", async ({ page }) => {
   await page.clock.runFor(21_000);
   await expect(page.locator(".parent")).toHaveCount(0);
   await expect(page.getByText("저장 안 한 할 일")).toHaveCount(0);
+});
+
+test("a first PIN that fails to save shows the error, no recovery code, and no PIN", async ({ page }) => {
+  await injectStorageFaults(page, 0);
+  await open(page, THU_MORNING);
+  await setFailSaves(page, true);
+  await pressSettings(page, 3300);
+  await expect(page.locator(".pin-title")).toHaveText("새 PIN을 정해 주세요");
+  await typeDigits(page, "1234");
+  await typeDigits(page, "1234");
+  await expect(page.locator(".pin-message")).toHaveText("저장하지 못했어요. 다시 눌러 주세요.");
+  await expect(page.locator(".recovery-code")).toHaveCount(0);
+  await page.getByRole("button", { name: "닫기" }).click();
+  await expect(page.locator(".parent")).toHaveCount(0);
+  // 메모리에도 PIN이 없으므로 다시 열면 PIN을 처음부터 정합니다.
+  await setFailSaves(page, false);
+  await pressSettings(page, 3300);
+  await expect(page.locator(".pin-title")).toHaveText("새 PIN을 정해 주세요");
+});
+
+/** 시계를 멈춘 채 설정 아이콘을 3초 누르고 첫 PIN을 정합니다. 복구 코드 화면에서 멈춥니다. */
+async function setUpPinWithFakeClock(page: Page, pin: string): Promise<void> {
+  await page.clock.install({ time: new Date(THU_MORNING) });
+  await page.goto("./");
+  await expect(page.locator(".panel")).toHaveCount(2);
+  const box = await page.locator(".settings-button").boundingBox();
+  if (!box) throw new Error("no settings button");
+  await page.mouse.move(box.x + 22, box.y + 22);
+  await page.mouse.down();
+  await page.clock.runFor(3100);
+  await page.mouse.up();
+  await typeDigits(page, pin);
+  await typeDigits(page, pin);
+  await expect(page.locator(".recovery-code")).toBeVisible();
+}
+
+const IDLE_MS = 120_000;
+const CAP_MS = 600_000;
+
+test("idle timer pauses while a recovery code is shown", async ({ page }) => {
+  await setUpPinWithFakeClock(page, "1234");
+  await page.clock.runFor(5 * 60_000);
+  await expect(page.locator(".recovery-code")).toBeVisible();
+  await page.getByRole("button", { name: "적어 두었어요" }).click();
+  await expect(page.locator(".p-topbar-title")).toHaveText("부모 모드");
+
+  // 복구 코드 새로 만들기에서도 같습니다.
+  await openMenu(page, "복구 코드 새로 만들기");
+  await page.getByRole("button", { name: "새로 만들기" }).click();
+  await expect(page.locator(".recovery-code")).toBeVisible();
+  await page.clock.runFor(5 * 60_000);
+  await expect(page.locator(".recovery-code")).toBeVisible();
+  await page.getByRole("button", { name: "적어 두었어요" }).click();
+  await page.clock.runFor(IDLE_MS + 1000);
+  await expect(page.locator(".parent")).toHaveCount(0);
+});
+
+test("idle timer pauses while the share sheet is open, for at most 10 minutes", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+    // 부모가 공유 시트를 열어 둔 채로 둡니다.
+    Object.defineProperty(navigator, "share", { configurable: true, value: () => new Promise(() => undefined) });
+  });
+  await setUpPinWithFakeClock(page, "1234");
+  await page.getByRole("button", { name: "적어 두었어요" }).click();
+  await openMenu(page, "백업");
+  await page.getByRole("button", { name: "백업 파일 저장" }).click();
+  await page.clock.runFor(CAP_MS - 1000);
+  await expect(page.locator(".parent")).toHaveCount(1);
+  await page.clock.runFor(1000 + IDLE_MS + 1000);
+  await expect(page.locator(".parent")).toHaveCount(0);
+});
+
+test("a backup file picked after parent mode closed still reaches the restore confirm", async ({ page }) => {
+  await setUpPinWithFakeClock(page, "1234");
+  await page.getByRole("button", { name: "적어 두었어요" }).click();
+  const backup = await page.evaluate(
+    () =>
+      new Promise<string>((resolve, reject) => {
+        const req = indexedDB.open("kid-board", 1);
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const db = req.result;
+          const get = db.transaction("doc", "readonly").objectStore("doc").get("main");
+          get.onsuccess = () => {
+            const doc = get.result;
+            db.close();
+            resolve(JSON.stringify({ schemaVersion: doc.schemaVersion, data: doc.data, settings: { location: null, didSeed: true, lastBackupAt: null }, weather: null }));
+          };
+          get.onerror = () => reject(get.error);
+        };
+      }),
+  );
+  await openMenu(page, "백업");
+  const choosing = page.waitForEvent("filechooser");
+  await page.locator(".backup-restore").click();
+  const chooser = await choosing;
+  // 파일 선택이 열려 있는 동안에는 닫지 않습니다.
+  await page.clock.runFor(5 * 60_000);
+  await expect(page.locator(".p-topbar-title")).toHaveText("백업");
+  // iOS는 취소를 알려 주지 않으므로 10분 뒤에는 다시 세고, 2분 뒤에 닫습니다.
+  await page.clock.runFor(5 * 60_000 + IDLE_MS + 1000);
+  await expect(page.locator(".parent")).toHaveCount(0);
+  // 그 뒤에 고른 파일도 버리지 않습니다. PIN을 확인한 뒤 복원 확인 창이 나옵니다.
+  await chooser.setFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from(backup) });
+  await expect(page.locator(".pin-title")).toHaveText("PIN을 입력해 주세요");
+  await typeDigits(page, "1234");
+  await expect(page.locator(".p-topbar-title")).toHaveText("백업");
+  await expect(page.locator(".p-dialog-title")).toHaveText("지금 데이터를 백업 내용으로 바꿀까요?");
+  await page.getByRole("button", { name: "바꾸기" }).click();
+  await expect(page.locator(".p-ok")).toHaveText("백업 내용으로 바꿨어요");
 });

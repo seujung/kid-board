@@ -70,3 +70,34 @@ export async function withSeoulWeather(page: Page): Promise<void> {
 export function panel(page: Page, index: number) {
   return page.locator(".panel").nth(index);
 }
+
+/**
+ * IndexedDB 실패를 흉내 냅니다.
+ * `__failOpens`만큼 `indexedDB.open`이 던지고, `__failSaves`가 참이면 `put`이 던집니다.
+ */
+export async function injectStorageFaults(page: Page, failOpens: number): Promise<void> {
+  await page.addInitScript((opens: number) => {
+    const w = window as unknown as { __failOpens: number; __failSaves: boolean };
+    w.__failOpens = opens;
+    w.__failSaves = false;
+    const open = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (this: IDBFactory, ...args: Parameters<IDBFactory["open"]>) {
+      if (w.__failOpens > 0) {
+        w.__failOpens -= 1;
+        throw new DOMException("Connection to Indexed Database server lost", "UnknownError");
+      }
+      return open.apply(this, args);
+    };
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore["put"]>) {
+      if (w.__failSaves) throw new DOMException("simulated failure", "UnknownError");
+      return put.apply(this, args);
+    };
+  }, failOpens);
+}
+
+export async function setFailSaves(page: Page, on: boolean): Promise<void> {
+  await page.evaluate((v) => {
+    (window as unknown as { __failSaves: boolean }).__failSaves = v;
+  }, on);
+}

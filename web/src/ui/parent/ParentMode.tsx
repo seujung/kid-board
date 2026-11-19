@@ -1,4 +1,4 @@
-import { useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { Clock } from "../../clock";
 import { IDLE_TIMEOUT_MS } from "../../core/parentLock";
 import type { BoardStore } from "../../store/boardStore";
@@ -15,6 +15,7 @@ import { PinSetup } from "./PinSetup";
 import { RecoveryCodeShow } from "./RecoveryCodeShow";
 import { RecoveryEntry } from "./RecoveryEntry";
 import { RecoveryRegenerate } from "./RecoveryRegenerate";
+import type { RestorePick } from "./restorePick";
 import { TasksEditor } from "./TasksEditor";
 import { TimesEditor } from "./TimesEditor";
 import { useIdle } from "./useIdle";
@@ -35,12 +36,16 @@ export interface ParentModeProps {
   version: string;
   update?: UpdateInfo;
   onClose: () => void;
+  /** 앱 최상위의 복원 입력 칸에서 고른 파일입니다. PIN을 확인한 뒤 백업 화면에서 확인 창을 보여 줍니다. */
+  restorePick?: RestorePick | null;
+  onRestorePickHandled?: () => void;
 }
 
 /**
  * 보드 위에 전체 화면으로 띄우는 부모 모드입니다(기존 설계 7.5, 웹 설계 6.5, 6.10).
  * PIN 확인(또는 첫 PIN 설정, 복구 코드로 PIN 다시 정하기)을 거친 뒤 메뉴를 엽니다.
  * 어느 화면에서든 2분 동안 입력이 없으면 `onClose`를 부릅니다. 저장하지 않은 입력은 버립니다.
+ * 복구 코드를 보여 주는 동안과 공유 시트, 파일 선택이 열린 동안에는 이 시간을 세지 않습니다.
  */
 export function ParentMode(props: ParentModeProps) {
   const { store, clock, onClose } = props;
@@ -50,7 +55,20 @@ export function ParentMode(props: ParentModeProps) {
   const [screen, setScreen] = useState<ParentScreen | null>(null);
   const [pinVerified, setPinVerified] = useState(false);
   const [notice, showNotice] = useNotice();
-  useIdle(root, IDLE_TIMEOUT_MS, onClose);
+  const [holds, setHolds] = useState<string[]>([]);
+  const hold = useCallback((key: string, on: boolean) => {
+    setHolds((h) => (on ? (h.indexOf(key) >= 0 ? h : h.concat([key])) : h.filter((k) => k !== key)));
+  }, []);
+  useIdle(root, IDLE_TIMEOUT_MS, onClose, stage.kind === "code" || holds.length > 0);
+
+  // 복원할 파일이 오면 PIN을 확인한 뒤 백업 화면으로 갑니다.
+  const restorePick = props.restorePick ?? null;
+  useEffect(() => {
+    if (restorePick && stage.kind === "home" && screen !== "backup") {
+      setPinVerified(false);
+      setScreen("backup");
+    }
+  }, [restorePick, stage.kind, screen]);
 
   const open = (next: ParentScreen | null) => {
     setPinVerified(false);
@@ -133,7 +151,15 @@ export function ParentMode(props: ParentModeProps) {
         body = <History store={store} clock={clock} />;
         break;
       case "backup":
-        body = <BackupPanel store={store} clock={clock} />;
+        body = (
+          <BackupPanel
+            store={store}
+            clock={clock}
+            onHold={hold}
+            restorePick={restorePick}
+            onPickHandled={props.onRestorePickHandled}
+          />
+        );
         break;
       case "changePin":
         body = pinVerified ? (
@@ -154,7 +180,7 @@ export function ParentMode(props: ParentModeProps) {
         );
         break;
       case "recoveryCode":
-        body = <RecoveryRegenerate store={store} onDone={back} />;
+        body = <RecoveryRegenerate store={store} onDone={back} onHold={hold} />;
         break;
     }
     content = (

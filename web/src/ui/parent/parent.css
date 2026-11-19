@@ -208,6 +208,8 @@
 }
 .backup-restore { position: relative; overflow: hidden; }
 .p-file { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; }
+/* 앱 최상위의 복원 입력 칸입니다. 화면 밖에 두어 자녀가 누를 수 없습니다. "백업에서 복원" label이 엽니다. */
+.restore-input { position: fixed; left: -10px; top: -10px; }
 
 /* PIN 화면 */
 .p-center {

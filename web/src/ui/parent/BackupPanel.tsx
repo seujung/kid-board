@@ -1,10 +1,14 @@
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { Clock } from "../../clock";
-import { exportBackup, parseBackup } from "../../store/backup";
+import { exportBackup } from "../../store/backup";
 import type { AppDoc } from "../../store/schema";
 import type { BoardStore } from "../../store/boardStore";
 import { Confirm, ErrorLine, errorText } from "./common";
+import { RESTORE_INPUT_ID } from "./restorePick";
+import type { RestorePick } from "./restorePick";
 import { shareBackup } from "./shareBackup";
+import { SYSTEM_SHEET_HOLD_CAP_MS } from "./useIdle";
+import type { IdleHold } from "./useIdle";
 
 export const SHARE_GUIDE = "공유 화면에서 '파일에 저장' > iCloud Drive를 고르세요.";
 export const GUIDED_ACCESS_GUIDE = "백업·복원 전에 홈 버튼을 세 번 눌러 사용법 유도 접근을 잠시 끄십시오.";
@@ -16,52 +20,99 @@ function lastBackupText(ms: number | null): string {
   return `마지막 백업: ${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
-/** 텍스트 파일을 읽습니다. iPadOS 15 Safari에서도 되는 FileReader를 씁니다. */
-function readText(file: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(file);
-  });
+/**
+ * 시스템 화면이 열린 동안 부모 모드 타이머를 멈춥니다. `stop`을 부르거나 상한 시간이 지나거나 화면이 사라지면 풉니다.
+ * `start`는 풀 때 정리할 함수를 받을 수 있습니다.
+ */
+function useSheetHold(onHold: IdleHold | undefined, key: string) {
+  const cleanup = useRef<(() => void) | null>(null);
+  const stop = () => {
+    const fn = cleanup.current;
+    cleanup.current = null;
+    if (fn) fn();
+  };
+  const start = (extra?: () => void) => {
+    stop();
+    if (!onHold) return;
+    onHold(key, true);
+    const cap = window.setTimeout(stop, SYSTEM_SHEET_HOLD_CAP_MS);
+    cleanup.current = () => {
+      window.clearTimeout(cap);
+      if (extra) extra();
+      onHold(key, false);
+    };
+  };
+  useEffect(() => stop, []);
+  return { start, stop };
 }
 
 /** 백업 파일 저장과 백업에서 복원입니다(웹 설계 6.5). */
-export function BackupPanel({ store, clock }: { store: BoardStore; clock: Clock }) {
+export interface BackupPanelProps {
+  store: BoardStore;
+  clock: Clock;
+  /** 공유 시트와 파일 선택이 열린 동안 부모 모드 타이머를 멈춥니다. */
+  onHold?: IdleHold;
+  /** 앱 최상위의 복원 입력 칸에서 고른 파일입니다. 받으면 확인 창이나 오류를 보이고 `onPickHandled`를 부릅니다. */
+  restorePick?: RestorePick | null;
+  onPickHandled?: () => void;
+}
+
+export function BackupPanel({ store, clock, onHold, restorePick, onPickHandled }: BackupPanelProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<AppDoc | null>(null);
   const [busy, setBusy] = useState(false);
+  const shareHold = useSheetHold(onHold, "share");
+  const pickerHold = useSheetHold(onHold, "picker");
+
+  useEffect(() => {
+    if (!restorePick) return;
+    pickerHold.stop();
+    setMessage(null);
+    if (restorePick.kind === "doc") {
+      setError(null);
+      setPending(restorePick.doc);
+    } else {
+      setError(restorePick.message);
+    }
+    onPickHandled?.();
+  }, [restorePick]);
 
   const save = () => {
     setMessage(null);
     setError(null);
     // 공유 시트는 누른 순간에 열어야 하므로 먼저 기다리지 않습니다.
     const file = exportBackup(store.doc(), clock.now());
+    shareHold.start();
     shareBackup(file, navigator, document)
       .then(async (result) => {
+        shareHold.stop();
         if (result === "cancelled") return;
         await store.markBackedUp();
         setMessage(result === "shared" ? "백업 파일을 보냈어요" : "백업 파일을 내려받았어요");
       })
-      .catch((err: unknown) => setError(errorText(err)));
+      .catch((err: unknown) => {
+        shareHold.stop();
+        setError(errorText(err));
+      });
   };
 
-  const pick = (e: Event) => {
-    const el = e.currentTarget as HTMLInputElement;
-    const file = el.files?.[0];
-    el.value = "";
-    if (!file) return;
-    setMessage(null);
-    setError(null);
-    readText(file).then(
-      (text) => {
-        const parsed = parseBackup(text);
-        if (parsed.ok) setPending(parsed.doc);
-        else setError(parsed.message);
-      },
-      () => setError("백업 파일을 읽을 수 없어요"),
-    );
+  /** 파일 선택이 열리는 탭입니다. 파일을 고르거나, 앱으로 돌아오거나(focus, visibilitychange), 10분이 지나면 타이머를 다시 셉니다. */
+  const openPicker = (e: Event) => {
+    if (busy) {
+      e.preventDefault();
+      return;
+    }
+    const resume = () => pickerHold.stop();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") resume();
+    };
+    window.addEventListener("focus", resume);
+    document.addEventListener("visibilitychange", onVisible);
+    pickerHold.start(() => {
+      window.removeEventListener("focus", resume);
+      document.removeEventListener("visibilitychange", onVisible);
+    });
   };
 
   const restore = () => {
@@ -98,16 +149,13 @@ export function BackupPanel({ store, clock }: { store: BoardStore; clock: Clock 
         <button type="button" class="p-button primary big backup-save" disabled={busy} onClick={save}>
           백업 파일 저장
         </button>
-        {/* iOS Safari에서 가장 확실하게 파일 선택을 여는 방법은 입력 칸을 감싼 label입니다. */}
-        <label class={busy ? "p-button big backup-restore disabled" : "p-button big backup-restore"}>
+        {/* iOS Safari에서 파일 선택을 여는 방법은 입력 칸을 가리키는 label입니다. 입력 칸은 앱 최상위(RestoreInput)에 있습니다. */}
+        <label
+          for={RESTORE_INPUT_ID}
+          class={busy ? "p-button big backup-restore disabled" : "p-button big backup-restore"}
+          onClick={openPicker}
+        >
           백업에서 복원
-          <input
-            class="p-file"
-            type="file"
-            accept="application/json,.json"
-            disabled={busy}
-            onChange={pick}
-          />
         </label>
       </div>
       <div class="p-footnote">PIN과 복구 코드는 백업에 넣지 않아요. 복원해도 지금 PIN을 그대로 써요.</div>
