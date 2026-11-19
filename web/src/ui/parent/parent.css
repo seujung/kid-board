@@ -186,6 +186,13 @@
 .times-field { width: 190px; }
 .times-label { margin-left: auto; font-size: 18px; font-weight: 700; }
 
+/* 화면 끄기 시간 */
+.dim-row { gap: 12px; }
+.dim-tilde { font-size: 20px; font-weight: 800; color: var(--p-muted); }
+.weekday-toggles.small { gap: 6px; margin-left: auto; }
+.weekday-toggles.small .weekday-toggle { width: 44px; height: 44px; font-size: 17px; }
+.dim-row .p-error.small { margin: 0 0 0 4px; }
+
 /* 지역 */
 .p-search { display: flex; gap: 12px; }
 .p-search .p-input { flex: 1; min-width: 0; }

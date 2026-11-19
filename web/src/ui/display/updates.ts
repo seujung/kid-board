@@ -1,8 +1,9 @@
-import { isNightMode } from "../../core/displayPolicy";
+import { DEFAULT_DIM_PERIODS, isDimmed } from "../../core/displayPolicy";
+import type { DimPeriod } from "../../core/displayPolicy";
 import type { Clock } from "../../clock";
 import type { UpdateInfo } from "../parent/ParentHome";
 
-/** 야간에 이만큼 입력이 없으면 새 버전을 적용합니다(웹 설계 6.7). */
+/** 화면 끄기 시간에 이만큼 입력이 없으면 새 버전을 적용합니다(웹 설계 6.7). */
 export const QUIET_MS = 300_000;
 /** 새 버전 적용 조건을 확인하는 간격입니다. */
 export const CHECK_MS = 60_000;
@@ -16,12 +17,19 @@ export const SKIP_WAITING = { type: "SKIP_WAITING" } as const;
 
 /**
  * 대기 중인 새 버전을 지금 적용할지입니다.
- * 부모가 요청했거나, 야간 모드 시간에 입력이 5분 이상 없으면 적용합니다.
+ * 부모가 요청했거나, 부모가 정한 화면 끄기 시간 안에서 입력이 5분 이상 없으면 적용합니다.
+ * 화면 끄기 시간이 하나도 없으면 부모가 요청하거나 앱을 다시 열 때만 적용합니다.
  */
-export function shouldApplyUpdate(input: { waiting: boolean; now: Date; lastInputAt: number; parentRequested: boolean }): boolean {
+export function shouldApplyUpdate(input: {
+  waiting: boolean;
+  now: Date;
+  lastInputAt: number;
+  parentRequested: boolean;
+  dimPeriods: readonly DimPeriod[];
+}): boolean {
   if (!input.waiting) return false;
   if (input.parentRequested) return true;
-  return isNightMode(input.now) && input.now.getTime() - input.lastInputAt >= QUIET_MS;
+  return isDimmed(input.now, input.dimPeriods) && input.now.getTime() - input.lastInputAt >= QUIET_MS;
 }
 
 /** 서비스 워커의 새 버전 상태를 앱에 알립니다. */
@@ -35,8 +43,14 @@ export interface UpdateSource {
  * - 새 워커가 `waiting`이면 "새 버전 있음"을 알립니다. 등록할 때 이미 설치 중인 워커도 지켜봅니다.
  * - 1분마다 `shouldApplyUpdate`를 확인하고, 참이면 워커에 `SKIP_WAITING`을 보냅니다.
  * - 워커가 바뀌면(`controllerchange`) 한 번만 다시 엽니다.
+ * `dimPeriods`는 지금 저장된 화면 끄기 시간을 돌려줍니다. 저장소를 열기 전에는 기본값을 씁니다.
  */
-export function startServiceWorker(clock: Clock, scriptUrl: string, scope: string): UpdateSource {
+export function startServiceWorker(
+  clock: Clock,
+  scriptUrl: string,
+  scope: string,
+  dimPeriods: () => readonly DimPeriod[] = () => DEFAULT_DIM_PERIODS,
+): UpdateSource {
   const sw = navigator.serviceWorker;
   const listeners = new Set<() => void>();
   let waiting: ServiceWorker | null = null;
@@ -46,7 +60,7 @@ export function startServiceWorker(clock: Clock, scriptUrl: string, scope: strin
 
   const tryApply = (parentRequested: boolean) => {
     if (!waiting) return;
-    if (!shouldApplyUpdate({ waiting: true, now: clock.now(), lastInputAt, parentRequested })) return;
+    if (!shouldApplyUpdate({ waiting: true, now: clock.now(), lastInputAt, parentRequested, dimPeriods: dimPeriods() })) return;
     applyRequested = true;
     waiting.postMessage(SKIP_WAITING);
   };

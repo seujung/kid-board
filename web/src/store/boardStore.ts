@@ -1,6 +1,7 @@
 import { canToggle } from "../core/boardState";
 import { compareDay, dayDateOf, sameDay } from "../core/dayDate";
 import type { DayDate, TimeOfDay } from "../core/dayDate";
+import type { DimPeriod } from "../core/displayPolicy";
 import type { BoardData, ChildInfo, TaskInfo, TimeSlot, Weekday } from "../core/domain";
 import {
   hashSecret,
@@ -481,14 +482,24 @@ export class BoardStore {
     await this.commit({ ...this.current, weather: snap });
   }
 
+  /** 화면 끄기 시간 목록을 통째로 바꿉니다. */
+  async setDimPeriods(periods: DimPeriod[]): Promise<void> {
+    await this.commitSettings({
+      dimPeriods: periods.map((p) => ({ id: p.id, start: { ...p.start }, end: { ...p.end }, weekdays: p.weekdays.slice() })),
+    });
+  }
+
   async markBackedUp(): Promise<void> {
     await this.commitSettings({ lastBackupAt: this.now().getTime() });
   }
 
-  /** 백업 내용으로 데이터·지역·날씨를 바꿉니다. 지금 기기의 PIN·복구 코드·잠금과 마지막 백업 시각은 유지합니다. */
+  /**
+   * 백업 내용으로 데이터·지역·화면 끄기 시간·날씨를 바꿉니다. 지금 기기의 PIN·복구 코드·잠금과 마지막 백업 시각은 유지합니다.
+   * 화면 끄기 시간이 없는 백업은 `migrate`가 기본값으로 채웁니다.
+   */
   async restore(doc: AppDoc): Promise<void> {
     await this.commitSettings(
-      { location: doc.settings.location, didSeed: true },
+      { location: doc.settings.location, didSeed: true, dimPeriods: doc.settings.dimPeriods },
       { schemaVersion: doc.schemaVersion, data: doc.data, weather: doc.weather },
     );
   }

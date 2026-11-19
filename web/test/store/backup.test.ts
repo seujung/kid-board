@@ -31,6 +31,7 @@ test("exportExcludesSecrets", async () => {
   expect(parsed.schemaVersion).toBe(1);
   expect(parsed.data.children.length).toBe(2);
   expect(parsed.settings.location).toEqual(seongnam);
+  expect(parsed.settings.dimPeriods).toEqual(store.settings().dimPeriods);
 });
 
 test("exportThenParseRoundTrips", async () => {
@@ -42,6 +43,7 @@ test("exportThenParseRoundTrips", async () => {
   expect(result.doc.data).toEqual(store.snapshot());
   expect(result.doc.settings.location).toEqual(seongnam);
   expect(result.doc.settings.pinHash).toBeNull();
+  expect(result.doc.settings.dimPeriods).toEqual(store.settings().dimPeriods);
 });
 
 test("parseBackupRejectsBadInput", () => {
@@ -81,4 +83,28 @@ test("restoreKeepsCurrentPin", async () => {
   expect(await target.verifyPin("1234")).toBe("ok");
   expect(await target.verifyPin("9999")).toBe("wrong");
   expect(await target.verifyRecoveryCode(code)).toBe("ok");
+});
+
+const SCHOOL = [{ id: "d1", start: { hour: 9, minute: 0 }, end: { hour: 14, minute: 0 }, weekdays: [1, 2, 3, 4, 5] as (1 | 2 | 3 | 4 | 5)[] }];
+
+test("restoreTakesDimPeriodsFromBackup", async () => {
+  const source = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID("src"));
+  await source.setDimPeriods(SCHOOL);
+  const parsed = parseBackup(exportBackup(source.doc(), at(2026, 11, 19, 7)).json);
+  if (!parsed.ok) throw new Error("parse failed");
+  const target = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID());
+  await target.setDimPeriods([]);
+  await target.restore(parsed.doc);
+  expect(target.settings().dimPeriods).toEqual(SCHOOL);
+});
+
+test("restoreWithoutDimPeriodsUsesDefault", async () => {
+  const old = JSON.parse(exportBackup(emptyDoc(), at(2026, 11, 19, 7)).json);
+  delete old.settings.dimPeriods;
+  const parsed = parseBackup(JSON.stringify(old));
+  if (!parsed.ok) throw new Error("parse failed");
+  const target = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID());
+  await target.setDimPeriods(SCHOOL);
+  await target.restore(parsed.doc);
+  expect(target.settings().dimPeriods).toEqual(emptyDoc().settings.dimPeriods);
 });

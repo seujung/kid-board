@@ -4,6 +4,7 @@ import { IDLE_TIMEOUT_MS } from "../../core/parentLock";
 import type { BoardStore } from "../../store/boardStore";
 import { BackupPanel } from "./BackupPanel";
 import { ChildrenEditor } from "./ChildrenEditor";
+import { DimPeriodsEditor } from "./DimPeriodsEditor";
 import { TopBar, useNotice } from "./common";
 import { backupOverdueDays } from "./format";
 import { History } from "./History";
@@ -143,6 +144,9 @@ export function ParentMode(props: ParentModeProps) {
         break;
       case "times":
         body = <TimesEditor store={store} />;
+        break;
+      case "dim":
+        body = <DimPeriodsEditor store={store} />;
         break;
       case "weather":
         body = <LocationPicker store={store} refreshWeather={props.refreshWeather} />;

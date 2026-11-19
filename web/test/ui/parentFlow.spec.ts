@@ -9,6 +9,7 @@ const MENU = [
   "자녀 관리",
   "할 일 관리",
   "시각 설정",
+  "화면 끄기 시간",
   "날씨 지역",
   "완료 기록",
   "백업",
@@ -230,6 +231,49 @@ test("every parent screen fits 1024x768", async ({ page }) => {
   await expect(page.locator(".p-error")).toHaveCount(0);
   await page.getByRole("button", { name: "저장" }).click();
   await expect(page.locator(".p-notice")).toHaveText("저장했어요");
+  await backToMenu(page);
+
+  // 화면 끄기 시간: 기본은 매일 22:00~06:00 한 구간입니다.
+  await openMenu(page, "화면 끄기 시간");
+  const dimRows = page.locator(".dim-row");
+  await expect(dimRows).toHaveCount(1);
+  await expect(page.getByLabel("구간 1 시작 시", { exact: true })).toHaveValue("22");
+  await expect(page.getByLabel("구간 1 끝 시", { exact: true })).toHaveValue("6");
+  await expect(dimRows.first().locator(".weekday-toggle.on")).toHaveCount(7);
+  await expect(page.locator(".p-footnote")).toHaveText(
+    "이 시간에는 화면을 어둡게 하고 시계만 보여 줘요. 화면을 누르면 30초 동안 보드를 보여 줘요.",
+  );
+  const dimSave = page.getByRole("button", { name: "저장" });
+  await expect(dimSave).toBeDisabled();
+  // 새 구간은 월~금 09:00~14:00입니다.
+  await page.locator(".p-add", { hasText: "구간 추가" }).click();
+  await expect(dimRows).toHaveCount(2);
+  await expect(page.getByLabel("구간 2 시작 시", { exact: true })).toHaveValue("9");
+  await expect(page.getByLabel("구간 2 끝 시", { exact: true })).toHaveValue("14");
+  await expect(dimRows.nth(1).locator(".weekday-toggle.on")).toHaveText(["월", "화", "수", "목", "금"]);
+  await expect(dimSave).toBeEnabled();
+  await expectNoHorizontalScroll(page);
+  await page.screenshot({ path: `${SHOTS}/parent-dim.png` });
+  // 요일을 모두 끄면 저장할 수 없습니다.
+  for (const d of ["월", "화", "수", "목", "금"]) await page.getByLabel(`구간 2 ${d}요일`, { exact: true }).click();
+  await expect(dimRows.nth(1).locator(".p-error")).toHaveText("요일을 하나 이상 고르세요");
+  await expect(dimSave).toBeDisabled();
+  await expectNoHorizontalScroll(page);
+  await page.screenshot({ path: `${SHOTS}/parent-dim-error.png` });
+  await page.getByLabel("구간 2 토요일", { exact: true }).click();
+  await expect(page.locator(".p-error")).toHaveCount(0);
+  await dimSave.click();
+  await expect(page.locator(".p-notice")).toHaveText("저장했어요");
+  await expect(dimSave).toBeDisabled();
+  // 구간을 모두 지우면 안내 문구를 보여 줍니다. 저장하지 않고 나가면 버립니다.
+  await page.getByRole("button", { name: "구간 2 지우기" }).click();
+  await page.getByRole("button", { name: "구간 1 지우기" }).click();
+  await expect(page.locator(".dim-empty")).toHaveText("화면 끄기 시간이 없어요. 화면이 항상 켜져 있어요.");
+  await expect(dimSave).toBeEnabled();
+  await page.screenshot({ path: `${SHOTS}/parent-dim-empty.png` });
+  await backToMenu(page);
+  await openMenu(page, "화면 끄기 시간");
+  await expect(dimRows).toHaveCount(2);
   await backToMenu(page);
 
   // 날씨 지역: 고르면 저장하고 보드의 날씨를 바로 다시 가져옵니다.
@@ -517,4 +561,26 @@ test("a backup file picked after parent mode closed still reaches the restore co
   await expect(page.locator(".p-dialog-title")).toHaveText("지금 데이터를 백업 내용으로 바꿀까요?");
   await page.getByRole("button", { name: "바꾸기" }).click();
   await expect(page.locator(".p-ok")).toHaveText("백업 내용으로 바꿨어요");
+});
+
+test("screen-off period dims the board in the daytime", async ({ page }) => {
+  await open(page, "2026-11-19T08:58:00+09:00");
+  await setUpPin(page, "1234");
+  await openMenu(page, "화면 끄기 시간");
+  await page.getByRole("button", { name: "구간 1 지우기" }).click();
+  await page.locator(".p-add", { hasText: "구간 추가" }).click();
+  await page.getByLabel("구간 1 시작 시", { exact: true }).selectOption("8");
+  await page.getByRole("button", { name: "저장" }).click();
+  await expect(page.locator(".p-notice")).toHaveText("저장했어요");
+  // 부모 모드가 열려 있는 동안에는 어둡게 하지 않습니다.
+  await expect(page.locator(".night-overlay")).toHaveCount(0);
+  await page.getByRole("button", { name: "보드로 돌아가기" }).click();
+  const overlay = page.locator(".night-overlay");
+  await expect(overlay).toBeVisible();
+  await expect(overlay.locator(".night-clock")).toHaveText(/^08:5[89]$/);
+  await page.screenshot({ path: `${SHOTS}/dim-daytime.png` });
+  // 누르면 30초 동안 보드를 보여 줍니다.
+  await overlay.click();
+  await expect(overlay).toHaveCount(0);
+  await expect(page.locator(".panel")).toHaveCount(2);
 });

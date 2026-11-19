@@ -1,4 +1,5 @@
-import { NIGHT_WAKE_MS, isNightMode } from "../../core/displayPolicy";
+import { NIGHT_WAKE_MS, isDimmed } from "../../core/displayPolicy";
+import type { DimPeriod } from "../../core/displayPolicy";
 
 export interface NightState {
   /** 검은 막을 덮었는지입니다. */
@@ -9,11 +10,17 @@ export interface NightState {
 
 /**
  * 야간 막의 다음 상태입니다(웹 설계 6.6).
- * - 야간 모드 시간이 아니거나 부모 모드가 열려 있으면 어둡게 하지 않습니다.
- * - 야간에 터치하면 그 시각부터 30초 동안 보드를 표시합니다. 표시 중 터치는 30초를 다시 셉니다.
+ * - 화면 끄기 시간(`periods`)이 아니거나 부모 모드가 열려 있으면 어둡게 하지 않습니다.
+ * - 화면 끄기 시간에 터치하면 그 시각부터 30초 동안 보드를 표시합니다. 표시 중 터치는 30초를 다시 셉니다.
  */
-export function nightState(prev: { wakeUntil: number | null }, now: Date, touched: boolean, parentOpen: boolean): NightState {
-  if (parentOpen || !isNightMode(now)) return { dimmed: false, wakeUntil: null };
+export function nightState(
+  prev: { wakeUntil: number | null },
+  now: Date,
+  touched: boolean,
+  parentOpen: boolean,
+  periods: readonly DimPeriod[],
+): NightState {
+  if (parentOpen || !isDimmed(now, periods)) return { dimmed: false, wakeUntil: null };
   const t = now.getTime();
   if (touched) return { dimmed: false, wakeUntil: t + NIGHT_WAKE_MS };
   if (prev.wakeUntil !== null && t < prev.wakeUntil) return { dimmed: false, wakeUntil: prev.wakeUntil };

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { Clock } from "../../clock";
+import type { BoardStore } from "../../store/boardStore";
 import { formatClock } from "../board/theme";
 import { MINUTE_MS, useBoundaryTick } from "../board/ticks";
 import { nightState } from "./nightState";
@@ -9,16 +10,22 @@ export { nightState } from "./nightState";
 const WAKE_EVENTS = ["pointerdown", "touchstart"] as const;
 
 /**
- * 22:00~06:00에 보드 위에 덮는 검은 막입니다(웹 설계 6.6).
+ * 부모가 정한 화면 끄기 시간(`settings.dimPeriods`, 기본값 매일 22:00~06:00)에 보드 위에 덮는 검은 막입니다(웹 설계 6.6).
  * 막을 누르면 보드를 30초 동안 표시합니다. 이 터치는 막만 받고 할 일 카드로 전달하지 않습니다.
  * 보드를 표시하는 동안 화면 어디든 누르면 30초를 다시 셉니다.
  */
-export function NightOverlay({ clock, parentOpen }: { clock: Clock; parentOpen: boolean }) {
-  // 1분 경계마다 시계와 야간 시간 여부를 다시 계산합니다.
+export function NightOverlay({ clock, parentOpen, store }: { clock: Clock; parentOpen: boolean; store: BoardStore }) {
+  // 1분 경계마다 시계와 화면 끄기 시간 여부를 다시 계산합니다.
   useBoundaryTick(clock, MINUTE_MS);
+  // 부모 모드에서 화면 끄기 시간을 바꾸면 다시 그립니다.
+  const [, setVersion] = useState(0);
+  useEffect(() => store.subscribe(() => setVersion((v) => v + 1)), [store]);
+  const periods = store.settings().dimPeriods;
+  const periodsRef = useRef(periods);
+  periodsRef.current = periods;
   const [wakeUntil, setWakeUntil] = useState<number | null>(null);
   const [, setExpired] = useState(0);
-  const state = nightState({ wakeUntil }, clock.now(), false, parentOpen);
+  const state = nightState({ wakeUntil }, clock.now(), false, parentOpen, periods);
 
   // 깨운 시간이 끝나면 다시 그려서 막을 덮습니다.
   useEffect(() => {
@@ -31,7 +38,8 @@ export function NightOverlay({ clock, parentOpen }: { clock: Clock; parentOpen: 
   const woken = state.wakeUntil !== null;
   useEffect(() => {
     if (!woken) return;
-    const extend = () => setWakeUntil((prev) => nightState({ wakeUntil: prev }, clock.now(), true, false).wakeUntil);
+    const extend = () =>
+      setWakeUntil((prev) => nightState({ wakeUntil: prev }, clock.now(), true, false, periodsRef.current).wakeUntil);
     for (const type of WAKE_EVENTS) window.addEventListener(type, extend, { capture: true, passive: true });
     return () => {
       for (const type of WAKE_EVENTS) window.removeEventListener(type, extend, { capture: true });
@@ -46,7 +54,7 @@ export function NightOverlay({ clock, parentOpen }: { clock: Clock; parentOpen: 
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        setWakeUntil(nightState({ wakeUntil: null }, clock.now(), true, parentOpen).wakeUntil);
+        setWakeUntil(nightState({ wakeUntil: null }, clock.now(), true, parentOpen, periods).wakeUntil);
       }}
     >
       <div class="night-clock">{formatClock(clock.now()).slice(0, 5)}</div>

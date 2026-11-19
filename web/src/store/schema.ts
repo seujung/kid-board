@@ -8,6 +8,8 @@ import type {
   TaskScheduleInfo,
   Weekday,
 } from "../core/domain";
+import { defaultDimPeriods } from "../core/displayPolicy";
+import type { DimPeriod } from "../core/displayPolicy";
 import { EMPTY_LOCKOUT } from "../core/parentLock";
 import type { Lockout } from "../core/parentLock";
 import type { GeoPlace, WeatherSnapshot } from "../core/weather";
@@ -25,6 +27,8 @@ export interface Settings {
   didSeed: boolean;
   /** epoch ms */
   lastBackupAt: number | null;
+  /** 화면 끄기 시간입니다. 없던 문서는 기본값(매일 22:00~06:00)으로 읽습니다. 빈 배열이면 끄지 않습니다. */
+  dimPeriods: DimPeriod[];
 }
 
 export interface AppDoc {
@@ -48,6 +52,7 @@ export function emptyDoc(): AppDoc {
       location: null,
       didSeed: false,
       lastBackupAt: null,
+      dimPeriods: defaultDimPeriods(),
     },
     weather: null,
   };
@@ -174,6 +179,15 @@ function geoPlace(v: unknown): GeoPlace {
   };
 }
 
+function dimPeriod(v: unknown): DimPeriod {
+  const o = obj(v);
+  return { id: str(o.id), start: timeOfDay(o.start), end: timeOfDay(o.end), weekdays: arr(o.weekdays).map(weekday) };
+}
+
+function dimPeriods(v: unknown): DimPeriod[] {
+  return arr(v).map(dimPeriod);
+}
+
 function weatherSnapshot(v: unknown): WeatherSnapshot {
   const o = obj(v);
   return {
@@ -198,6 +212,7 @@ function settings(v: unknown): Settings {
     location: optional(o.location, nullable(geoPlace), null),
     didSeed: optional(o.didSeed, bool, false),
     lastBackupAt: optional(o.lastBackupAt, nullable(num), null),
+    dimPeriods: optional(o.dimPeriods, dimPeriods, defaultDimPeriods()),
   };
 }
 

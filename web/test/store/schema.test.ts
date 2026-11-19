@@ -27,6 +27,10 @@ function validDoc() {
       location: { name: "성남시", admin1: null, latitude: 37.42, longitude: 127.13 },
       didSeed: true,
       lastBackupAt: 5,
+      dimPeriods: [
+        { id: "d1", start: { hour: 9, minute: 0 }, end: { hour: 14, minute: 0 }, weekdays: [1, 2, 3, 4, 5] },
+        { id: "d2", start: { hour: 23, minute: 30 }, end: { hour: 6, minute: 0 }, weekdays: [6, 7] },
+      ],
     },
     weather: { temperature: 1, weatherCode: 2, high: 3, low: 0, precipitationProbability: 10, fetchedAt: 4 },
   };
@@ -50,8 +54,12 @@ test("emptyDocShape", () => {
     location: null,
     didSeed: false,
     lastBackupAt: null,
+    dimPeriods: [
+      { id: "default-night", start: { hour: 22, minute: 0 }, end: { hour: 6, minute: 0 }, weekdays: [1, 2, 3, 4, 5, 6, 7] },
+    ],
   });
   expect(doc.weather).toBeNull();
+  expect(emptyDoc().settings.dimPeriods).not.toBe(doc.settings.dimPeriods);
   expect(emptyDoc()).not.toBe(doc);
   expect(emptyDoc().data.children).not.toBe(doc.data.children);
 });
@@ -74,6 +82,21 @@ test("migrateFillsMissingSettingsWithDefaults", () => {
   if (!result.ok) return;
   expect(result.doc.settings).toEqual(emptyDoc().settings);
   expect(result.doc.weather).toBeNull();
+});
+
+test("migrateFillsMissingDimPeriodsWithDefault", () => {
+  const raw = validDoc() as { settings: Record<string, unknown> };
+  delete raw.settings.dimPeriods;
+  const result = migrate(raw);
+  expect(result.ok && result.doc.settings.dimPeriods).toEqual(emptyDoc().settings.dimPeriods);
+  expect(result.ok && result.doc.schemaVersion).toBe(1);
+});
+
+test("migrateKeepsEmptyDimPeriods", () => {
+  const raw = validDoc() as { settings: Record<string, unknown> };
+  raw.settings.dimPeriods = [];
+  const result = migrate(raw);
+  expect(result.ok && result.doc.settings.dimPeriods).toEqual([]);
 });
 
 test("migrateDropsBadWeatherCache", () => {
@@ -121,6 +144,11 @@ test("migrateRejectsBadStructure", () => {
     (d) => ((d.settings as { lockout: unknown }).lockout = { failures: "1" }),
     (d) => ((d.settings as { location: unknown }).location = { name: "x" }),
     (d) => ((d.settings as { lastBackupAt: unknown }).lastBackupAt = "now"),
+    (d) => ((d.settings as { dimPeriods: unknown }).dimPeriods = {}),
+    (d) => ((d.settings.dimPeriods[0] as { id: unknown }).id = 1),
+    (d) => ((d.settings.dimPeriods[0] as { start: unknown }).start = { hour: 24, minute: 0 }),
+    (d) => ((d.settings.dimPeriods[0] as { end: unknown }).end = null),
+    (d) => ((d.settings.dimPeriods[0] as { weekdays: unknown }).weekdays = [8]),
   ];
   mutations.forEach((mutate, i) => {
     const doc = validDoc();

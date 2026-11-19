@@ -1,13 +1,6 @@
 import { expect, test } from "vitest";
-import { isNightMode, sceneOf, showsUmbrella } from "../../src/core/displayPolicy";
+import { sceneOf, showsUmbrella } from "../../src/core/displayPolicy";
 import { at } from "../support";
-
-test("nightModeBoundaries", () => {
-  expect(isNightMode(at(2026, 11, 19, 21, 59))).toBe(false);
-  expect(isNightMode(at(2026, 11, 19, 22, 0))).toBe(true);
-  expect(isNightMode(at(2026, 11, 19, 5, 59))).toBe(true);
-  expect(isNightMode(at(2026, 11, 19, 6, 0))).toBe(false);
-});
 
 test("sceneBoundaries", () => {
   expect(sceneOf(at(2026, 11, 19, 5, 59))).toBe("night");

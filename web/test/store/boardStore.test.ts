@@ -583,6 +583,30 @@ test("markBackedUpStoresNow", async () => {
   expect(store.settings().lastBackupAt).toBe(at(2026, 11, 19, 7).getTime());
 });
 
+test("setDimPeriodsPersistsAndCopies", async () => {
+  const storage = idbStorage(freshDBName());
+  const store = await BoardStore.open(storage, () => at(2026, 11, 19, 7), counterID());
+  expect(store.settings().dimPeriods).toEqual(emptyDoc().settings.dimPeriods);
+  let count = 0;
+  store.subscribe(() => {
+    count += 1;
+  });
+  const periods = [
+    { id: "a", start: { hour: 9, minute: 0 }, end: { hour: 14, minute: 0 }, weekdays: [1, 2, 3, 4, 5] as (1 | 2 | 3 | 4 | 5)[] },
+  ];
+  await store.setDimPeriods(periods);
+  expect(count).toBe(1);
+  periods[0]!.weekdays.push(5);
+  periods[0]!.start.hour = 1;
+  expect(store.settings().dimPeriods).toEqual([
+    { id: "a", start: { hour: 9, minute: 0 }, end: { hour: 14, minute: 0 }, weekdays: [1, 2, 3, 4, 5] },
+  ]);
+  const reopened = await BoardStore.open(storage, () => at(2026, 11, 19, 7), counterID());
+  expect(reopened.settings().dimPeriods).toEqual(store.settings().dimPeriods);
+  await store.setDimPeriods([]);
+  expect(store.settings().dimPeriods).toEqual([]);
+});
+
 // MARK: idb
 
 test("idbStorageRoundTrips", async () => {

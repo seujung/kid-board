@@ -50,9 +50,11 @@ export interface AppProps {
   clock: Clock;
   /** 새 버전 정보입니다. 운영 빌드에서 main.tsx가 서비스 워커와 연결합니다. 없으면 "새 버전 있음"을 표시하지 않습니다. */
   update?: UpdateInfo;
+  /** 저장소를 연 뒤 한 번 부릅니다. main.tsx가 새 버전 적용 조건에 화면 끄기 시간을 쓰려고 받습니다. */
+  onStore?: (store: BoardStore) => void;
 }
 
-export function App({ storage, clock, update }: AppProps) {
+export function App({ storage, clock, update, onStore }: AppProps) {
   const [boot, setBoot] = useState<Boot>({ kind: "loading" });
   /** 부모 모드가 열려 있는지입니다. 야간 막은 이 값이 참이면 어둡게 하지 않습니다. */
   const [parentOpen, setParentOpen] = useState(false);
@@ -67,6 +69,7 @@ export function App({ storage, clock, update }: AppProps) {
     openStore(storage, clock).then(
       (store) => {
         if (!live) return;
+        onStore?.(store);
         // 열기 실패는 일시적인 문제이므로 손상 화면 대신 다시 시도 화면을 보여 줍니다.
         setBoot(store.errorReason === "loadFailed" ? { kind: "failed" } : { kind: "ready", store });
       },
@@ -101,7 +104,7 @@ export function App({ storage, clock, update }: AppProps) {
           return <SettingsButton onLongPress={() => setParentOpen(true)} />;
         }}
       />
-      <NightOverlay clock={clock} parentOpen={parentOpen} />
+      <NightOverlay clock={clock} parentOpen={parentOpen} store={store} />
       <RestoreInput
         onPick={(pick) => {
           setRestorePick(pick);
