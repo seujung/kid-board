@@ -199,6 +199,8 @@ final class AppSettingsModel {
     var latitude: Double?
     var longitude: Double?
     var lastSeenProfileCreation: Date?
+    /// 첫 실행 예시 데이터를 넣었으면 `true`입니다. 부모가 자녀를 모두 지워도 다시 넣지 않습니다.
+    var didSeed: Bool = false
 
     init() {
         lockoutFailures = 0

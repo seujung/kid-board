@@ -48,6 +48,53 @@ private func morningTask(_ data: BoardData) -> (child: UUID, task: UUID) {
     #expect(data.children.map(\.name) == ["첫째", "둘째"])
 }
 
+@MainActor @Test func seedRunsOnlyOnceEvenAfterAllChildrenAreDeleted() throws {
+    let store = try makeStore()
+    store.seedIfEmpty(today: wed)
+    for child in store.snapshot().children { store.deleteChild(id: child.id) }
+    store.seedIfEmpty(today: wed)
+    #expect(store.snapshot().children.isEmpty)
+    #expect(store.settings().didSeed)
+}
+
+@MainActor @Test func seedSkipsStoreThatAlreadyHasChildren() throws {
+    let store = try makeStore()
+    store.addChild(name: "하나", avatar: "🐱", themeColor: "mint")
+    store.seedIfEmpty(today: wed)
+    #expect(store.snapshot().children.map(\.name) == ["하나"])
+    #expect(store.settings().didSeed)
+}
+
+@MainActor @Test func addChildCreatesDefaultTimes() throws {
+    let store = try makeStore()
+    let child = store.addChild(name: "하나", avatar: "🐱", themeColor: "mint")
+    let times = store.snapshot().times.filter { $0.childID == child }
+    #expect(times.count == 7)
+    for weekday in Weekday.allCases {
+        let entry = times.first { $0.weekday == weekday }
+        let expected = SeedData.times(for: weekday)
+        #expect(entry?.schoolTime == expected.school)
+        #expect(entry?.bedTime == TimeOfDay(hour: 21, minute: 30))
+    }
+    #expect(times.first { $0.weekday == .mon }?.schoolTime == TimeOfDay(hour: 8, minute: 20))
+    #expect(times.first { $0.weekday == .sat }?.schoolTime == nil)
+    #expect(times.first { $0.weekday == .sun }?.schoolTime == nil)
+}
+
+@MainActor @Test func snapshotIsCachedUntilAMutation() throws {
+    let (store, data) = try seeded()
+    let builds = store.snapshotBuildCount
+    _ = store.snapshot()
+    _ = store.snapshot()
+    #expect(store.snapshotBuildCount == builds)
+    let (child, task) = morningTask(data)
+    #expect(store.toggleCompletion(childID: child, taskID: task, now: date(11, 19, 7)))
+    #expect(store.snapshot().completions.count == 1)
+    #expect(store.snapshotBuildCount == builds + 1)
+    _ = store.snapshot()
+    #expect(store.snapshotBuildCount == builds + 1)
+}
+
 @MainActor @Test func toggleCreatesAndRemovesCompletion() throws {
     let (store, data) = try seeded()
     let (child, task) = morningTask(data)

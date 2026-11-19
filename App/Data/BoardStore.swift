@@ -37,8 +37,18 @@ final class BoardStore: ObservableObject {
     /// 여러 변경을 묶을 때 알림을 한 번만 보내기 위한 중첩 깊이입니다.
     private var batchDepth = 0
 
+    /// 마지막으로 만든 `snapshot()` 결과입니다. 저장할 때마다 비웁니다.
+    private var cachedSnapshot: BoardData?
+
+    #if DEBUG
+    /// `snapshot()`이 저장소에서 새로 읽은 횟수입니다. 테스트에서 씁니다.
+    private(set) var snapshotBuildCount = 0
+    #endif
+
+    /// 모든 변경이 거치는 곳입니다. 저장하고, 스냅숏 캐시를 비우고, 관찰자에게 알립니다.
     private func save() {
         try? context.save()
+        cachedSnapshot = nil
         if batchDepth == 0 { objectWillChange.send() }
     }
 
@@ -66,14 +76,21 @@ final class BoardStore: ObservableObject {
 
     // MARK: Snapshot
 
+    /// 보드가 매초 부르므로 캐시한 값을 돌려줍니다. `save()`가 캐시를 비웁니다.
     func snapshot() -> BoardData {
-        BoardData(
+        if let cachedSnapshot { return cachedSnapshot }
+        #if DEBUG
+        snapshotBuildCount += 1
+        #endif
+        let data = BoardData(
             children: all(ChildModel.self).map(\.info).sorted { $0.order < $1.order },
             tasks: all(TaskModel.self).map(\.info),
             schedules: all(TaskScheduleModel.self).map(\.info),
             times: all(DailyTimesModel.self).map(\.info),
             completions: all(CompletionModel.self).map(\.info)
         )
+        cachedSnapshot = data
+        return data
     }
 
     // MARK: Settings
@@ -154,32 +171,38 @@ final class BoardStore: ObservableObject {
 
     // MARK: Seed
 
+    /// 첫 실행에만 예시 자녀와 할 일을 넣습니다. 한 번 넣으면 `didSeed`를 기록하고 다시 넣지 않습니다.
+    /// 이미 자녀가 있는 저장소(이전 버전에서 옮긴 저장소)에는 넣지 않고 기록만 합니다.
     func seedIfEmpty(today: DayDate) {
-        guard all(ChildModel.self).isEmpty else { return }
+        let settings = settings()
+        guard !settings.didSeed else { return }
         batch {
-        for (index, seed) in SeedData.children.enumerated() {
-            let childID = addChild(name: seed.name, avatar: seed.avatar, themeColor: seed.themeColor)
-            if let child = all(ChildModel.self).first(where: { $0.id == childID }) { child.order = index }
-            for weekday in Weekday.allCases {
-                let times = SeedData.times(for: weekday)
-                context.insert(DailyTimesModel(DailyTimesInfo(
-                    childID: childID, weekday: weekday, schoolTime: times.school, bedTime: times.bed)))
+            settings.didSeed = true
+            guard all(ChildModel.self).isEmpty else { return }
+            for (index, seed) in SeedData.children.enumerated() {
+                let childID = addChild(name: seed.name, avatar: seed.avatar, themeColor: seed.themeColor)
+                if let child = all(ChildModel.self).first(where: { $0.id == childID }) { child.order = index }
+                for task in SeedData.tasks {
+                    _ = addTask(childID: childID, title: task.title, icon: task.icon,
+                                slot: task.slot, weekdays: task.weekdays, today: today)
+                }
             }
-            for task in SeedData.tasks {
-                _ = addTask(childID: childID, title: task.title, icon: task.icon,
-                            slot: task.slot, weekdays: task.weekdays, today: today)
-            }
-        }
         }
     }
 
     // MARK: Children
 
+    /// 자녀를 더하고 요일마다 기본 시각(`SeedData.times`)을 넣습니다.
     @discardableResult
     func addChild(name: String, avatar: String, themeColor: String) -> UUID {
         let order = (all(ChildModel.self).map(\.order).max() ?? -1) + 1
         let child = ChildModel(name: name, avatar: avatar, themeColor: themeColor, order: order)
         context.insert(child)
+        for weekday in Weekday.allCases {
+            let times = SeedData.times(for: weekday)
+            context.insert(DailyTimesModel(DailyTimesInfo(
+                childID: child.id, weekday: weekday, schoolTime: times.school, bedTime: times.bed)))
+        }
         save()
         return child.id
     }
