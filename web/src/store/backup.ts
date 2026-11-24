@@ -13,14 +13,7 @@ export function exportBackup(doc: AppDoc, now: Date): { fileName: string; json: 
   const backup = {
     schemaVersion: doc.schemaVersion,
     data: doc.data,
-    settings: {
-      location: s.location,
-      didSeed: s.didSeed,
-      lastBackupAt: s.lastBackupAt,
-      dimPeriods: s.dimPeriods,
-      sound: s.sound,
-      calendarProxyUrl: s.calendarProxyUrl,
-    },
+    settings: { location: s.location, didSeed: s.didSeed, lastBackupAt: s.lastBackupAt, dimPeriods: s.dimPeriods, sound: s.sound },
     weather: doc.weather,
   };
   const stamp = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}`;

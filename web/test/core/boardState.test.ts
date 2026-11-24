@@ -5,7 +5,7 @@ import type { DayDate, TimeOfDay } from "../../src/core/dayDate";
 import type { BoardData, ChildInfo, DailyTimesInfo, TaskInfo, TimeSlot, Weekday } from "../../src/core/domain";
 import { at } from "../support";
 
-const kid: ChildInfo = { id: "kid", name: "민준", avatar: "star", themeColor: "blue", order: 0, calendars: [] };
+const kid: ChildInfo = { id: "kid", name: "민준", avatar: "star", themeColor: "blue", order: 0 };
 const start: DayDate = { year: 2026, month: 1, day: 1 };
 const thu: DayDate = { year: 2026, month: 11, day: 19 };
 const ALL: Weekday[] = [1, 2, 3, 4, 5, 6, 7];

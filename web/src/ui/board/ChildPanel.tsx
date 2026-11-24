@@ -12,9 +12,8 @@ import { completesPhase, soundFor } from "../sound/policy";
 import { playSound } from "../sound/sounds";
 import { CountdownCard } from "./CountdownCard";
 import { OtherDayList, TodayList, UndoDialog } from "./DayList";
-import { Celebration, CELEBRATION_MS } from "./Stamp";
+import { CELEBRATION_MS, Celebration } from "./Stamp";
 import { themeNamed, themeStyle } from "./theme";
-import { TodayCalendar } from "./TodayCalendar";
 import { WeekStrip } from "./WeekStrip";
 
 export const READ_ONLY_TIMEOUT_MS = 30_000;
@@ -133,25 +132,10 @@ export function ChildPanel({ store, clock, state, data, onSaveError }: ChildPane
   };
 
   const selectDay = (day: DayDate) => setSelectedDay(sameDay(day, state.day) ? null : day);
-  const hasCalendars = child.calendars.length > 0;
-  const taskList = viewing ? (
-    <OtherDayList childID={child.id} day={viewing} data={data} onBack={() => setSelectedDay(null)} />
-  ) : (
-    <TodayList
-      title={slotTitle(state, data)}
-      tasks={state.visibleTasks}
-      doneIDs={state.doneTaskIDs}
-      nowTaskID={state.nowTaskID}
-      stampedID={stampedID}
-      shakes={shakes}
-      busy={busy}
-      onTap={tap}
-    />
-  );
 
   return (
     <section
-      class={hasCalendars ? "panel has-calendar" : "panel"}
+      class="panel"
       style={themeStyle(themeNamed(child.themeColor))}
       onPointerDown={() => {
         if (viewing) setInteractions((n) => n + 1);
@@ -165,13 +149,19 @@ export function ChildPanel({ store, clock, state, data, onSaveError }: ChildPane
         <CountdownCard clock={clock} phase={state.phase} remaining={state.remaining} progress={state.progress} />
       </div>
       <WeekStrip childID={child.id} today={state.day} selected={viewing} data={data} onSelect={selectDay} />
-      {hasCalendars ? (
-        <div class="panel-content">
-          {taskList}
-          <TodayCalendar store={store} clock={clock} child={child} day={state.day} now={clock.now()} />
-        </div>
+      {viewing ? (
+        <OtherDayList childID={child.id} day={viewing} data={data} onBack={() => setSelectedDay(null)} />
       ) : (
-        taskList
+        <TodayList
+          title={slotTitle(state, data)}
+          tasks={state.visibleTasks}
+          doneIDs={state.doneTaskIDs}
+          nowTaskID={state.nowTaskID}
+          stampedID={stampedID}
+          shakes={shakes}
+          busy={busy}
+          onTap={tap}
+        />
       )}
       {celebrating && <Celebration />}
       {pendingUndo && (

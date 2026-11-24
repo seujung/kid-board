@@ -2,7 +2,7 @@ import { canToggle } from "../core/boardState";
 import { compareDay, dayDateOf, sameDay } from "../core/dayDate";
 import type { DayDate, TimeOfDay } from "../core/dayDate";
 import type { DimPeriod } from "../core/displayPolicy";
-import type { BoardData, CalendarCacheEntry, ChildCalendar, ChildInfo, TaskInfo, TimeSlot, Weekday } from "../core/domain";
+import type { BoardData, ChildInfo, TaskInfo, TimeSlot, Weekday } from "../core/domain";
 import {
   hashSecret,
   isLocked,
@@ -142,10 +142,6 @@ export class BoardStore {
     return this.current.weather;
   }
 
-  calendarCache(childID: string): CalendarCacheEntry | null {
-    return this.current.calendarCache[childID] ?? null;
-  }
-
   /** 현재 문서 전체입니다. 백업 파일을 만들 때 씁니다. */
   doc(): AppDoc {
     return this.current;
@@ -224,15 +220,14 @@ export class BoardStore {
   // MARK: Children
 
   /** 자녀를 더하고 요일마다 기본 시각을 넣습니다. */
-  async addChild(name: string, avatar: string, themeColor: string, calendars: ChildCalendar[] = []): Promise<string> {
+  async addChild(name: string, avatar: string, themeColor: string): Promise<string> {
     this.ensureWritable();
     const id = this.newID();
-    const copy = calendars.map((cal) => ({ ...cal }));
     await this.commitData((d) => {
       const order = d.children.reduce((m, c) => Math.max(m, c.order), -1) + 1;
       return {
         ...d,
-        children: d.children.concat([{ id, name, avatar, themeColor, order, calendars: copy }]),
+        children: d.children.concat([{ id, name, avatar, themeColor, order }]),
         times: d.times.concat(defaultTimes(id)),
       };
     });
@@ -243,27 +238,21 @@ export class BoardStore {
   async updateChild(info: ChildInfo): Promise<void> {
     this.ensureWritable();
     if (!this.current.data.children.some((c) => c.id === info.id)) return;
-    const copy: ChildInfo = { ...info, calendars: info.calendars.map((cal) => ({ ...cal })) };
-    await this.commitData((d) => ({ ...d, children: d.children.map((c) => (c.id === info.id ? copy : c)) }));
+    await this.commitData((d) => ({ ...d, children: d.children.map((c) => (c.id === info.id ? { ...info } : c)) }));
   }
 
-  /** 자녀와 자녀의 할 일, 일정, 시각, 완료 기록, 캘린더 캐시를 지웁니다. */
+  /** 자녀와 자녀의 할 일, 일정, 시각, 완료 기록을 지웁니다. */
   async deleteChild(id: string): Promise<void> {
     this.ensureWritable();
-    const d = this.current.data;
-    const taskIDs = new Set(d.tasks.filter((t) => t.childID === id).map((t) => t.id));
-    const nextCache = { ...this.current.calendarCache };
-    delete nextCache[id];
-    await this.commit({
-      ...this.current,
-      data: {
+    await this.commitData((d) => {
+      const taskIDs = new Set(d.tasks.filter((t) => t.childID === id).map((t) => t.id));
+      return {
         children: d.children.filter((c) => c.id !== id),
         tasks: d.tasks.filter((t) => t.childID !== id),
         schedules: d.schedules.filter((s) => !taskIDs.has(s.taskID)),
         times: d.times.filter((t) => t.childID !== id),
         completions: d.completions.filter((c) => c.childID !== id),
-      },
-      calendarCache: nextCache,
+      };
     });
   }
 
@@ -493,22 +482,6 @@ export class BoardStore {
     await this.commit({ ...this.current, weather: snap });
   }
 
-  /** iCal 프록시 주소를 저장하고 캘린더 캐시를 비웁니다. */
-  async setCalendarProxyUrl(url: string | null): Promise<void> {
-    await this.commitSettings({ calendarProxyUrl: url }, { calendarCache: {} });
-  }
-
-  async setCalendarCache(childID: string, entry: CalendarCacheEntry | null): Promise<void> {
-    this.ensureWritable();
-    const nextCache = { ...this.current.calendarCache };
-    if (entry === null) {
-      delete nextCache[childID];
-    } else {
-      nextCache[childID] = { ...entry, events: entry.events.map((e) => ({ ...e })) };
-    }
-    await this.commit({ ...this.current, calendarCache: nextCache });
-  }
-
   /** 화면 끄기 시간 목록을 통째로 바꿉니다. */
   async setDimPeriods(periods: DimPeriod[]): Promise<void> {
     await this.commitSettings({
@@ -531,14 +504,8 @@ export class BoardStore {
    */
   async restore(doc: AppDoc): Promise<void> {
     await this.commitSettings(
-      {
-        location: doc.settings.location,
-        didSeed: true,
-        dimPeriods: doc.settings.dimPeriods,
-        sound: { ...doc.settings.sound },
-        calendarProxyUrl: doc.settings.calendarProxyUrl,
-      },
-      { schemaVersion: doc.schemaVersion, data: doc.data, weather: doc.weather, calendarCache: {} },
+      { location: doc.settings.location, didSeed: true, dimPeriods: doc.settings.dimPeriods, sound: { ...doc.settings.sound } },
+      { schemaVersion: doc.schemaVersion, data: doc.data, weather: doc.weather },
     );
   }
 }
