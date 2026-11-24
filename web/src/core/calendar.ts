@@ -1,33 +1,13 @@
 import type { DayDate } from "./dayDate";
-import type { ChildCalendar } from "./domain";
+import type { CalendarEvent, ChildCalendar } from "./domain";
 
-export const DEFAULT_CALENDAR_TZ = "Asia/Seoul";
-export const CALENDAR_EMBED_BASE = "https://calendar.google.com/calendar/embed";
-export const CALENDAR_REFRESH_MS = 1_800_000;
+export const CALENDAR_REFRESH_MS = 900_000;
+export const CALENDAR_STALE_AFTER_MS = 10_800_000;
+export const CALENDAR_COLOR_PRESETS = ["#E85A4F", "#3B82C4", "#2E9E7A", "#8A6BD1", "#E0A21B", "#D96B27"];
 
-export interface ParsedCalendarEntry {
-  src: string;
-  ctz: string;
-  color: string | null;
-}
-
-export type ParseCalendarResult =
-  | { ok: true; entries: ParsedCalendarEntry[] }
-  | { ok: false; message: string };
-
-const TZ_RE = /^[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)*$/;
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 const IFRAME_TAG_RE = /<iframe\b/i;
-const IFRAME_SRC_RE = /\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i;
-const EMBED_PATH_RE = /^\/calendar(?:\/u\/\d+)?\/embed\/?$/i;
-const ICAL_PATH_RE = /^\/calendar\/ical\/([^/]+)\//i;
-const BARE_ID_RE = /^[^\s<>@"'&]+@[^\s<>@"'&]+\.[^\s<>@"'&]+$/;
-
-export function normalizeTimezone(raw: string | null | undefined): string {
-  if (typeof raw !== "string") return DEFAULT_CALENDAR_TZ;
-  const trimmed = raw.trim();
-  return TZ_RE.test(trimmed) ? trimmed : DEFAULT_CALENDAR_TZ;
-}
+const GOOGLE_ICAL_PATH_RE = /^\/calendar\/ical\/([^/]+)\//i;
 
 export function normalizeHexColor(raw: string | null | undefined): string | null {
   if (typeof raw !== "string") return null;
@@ -35,123 +15,160 @@ export function normalizeHexColor(raw: string | null | undefined): string | null
   return HEX_COLOR_RE.test(trimmed) ? trimmed.toUpperCase() : null;
 }
 
+export function parseIcalUrlInput(input: string): { ok: true; url: string } | { ok: false; message: string } {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return { ok: false, message: "iCal 주소를 입력해 주세요." };
+  }
+  if (IFRAME_TAG_RE.test(trimmed)) {
+    return { ok: false, message: "iframe 코드 대신 Google 캘린더의 'iCal 형식의 비공개 주소(.ics)'를 넣어 주세요." };
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return { ok: false, message: "https://로 시작하는 Google 캘린더 iCal(.ics) 주소를 입력해 주세요." };
+  }
+  if (url.protocol !== "https:") {
+    return { ok: false, message: "https://로 시작하는 Google 캘린더 iCal(.ics) 주소를 입력해 주세요." };
+  }
+  const isGoogleIcal = url.hostname === "calendar.google.com" && GOOGLE_ICAL_PATH_RE.test(url.pathname);
+  const isIcsPath = /\.ics$/i.test(url.pathname);
+  if (!isGoogleIcal && !isIcsPath) {
+    return { ok: false, message: "https://로 시작하는 Google 캘린더 iCal(.ics) 주소를 입력해 주세요." };
+  }
+  return { ok: true, url: url.toString() };
+}
+
+export function parseProxyUrlInput(input: string): { ok: true; url: string | null } | { ok: false; message: string } {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return { ok: true, url: null };
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return { ok: false, message: "https://로 시작하는 프록시 주소를 입력해 주세요." };
+  }
+  const isLocalHttp = url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+  if (url.protocol !== "https:" && !isLocalHttp) {
+    return { ok: false, message: "https://로 시작하는 프록시 주소를 입력해 주세요." };
+  }
+  return { ok: true, url: url.toString() };
+}
+
+export function buildProxyRequestURL(proxyUrl: string, icsUrl: string): string {
+  const url = new URL(proxyUrl);
+  url.searchParams.set("url", icsUrl);
+  return url.toString();
+}
+
+function shortenCalendarId(id: string): string {
+  const atIndex = id.indexOf("@");
+  if (atIndex <= 14) return id;
+  return `${id.slice(0, 12)}…${id.slice(atIndex)}`;
+}
+
+/** 비밀 토큰(`/private-.../`)이 화면에 노출되지 않도록 iCal 주소를 가려 줍니다. */
+export function maskCalendarUrl(rawUrl: string): string {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return rawUrl;
+  }
+  const match = url.pathname.match(GOOGLE_ICAL_PATH_RE);
+  if (match && match[1]) {
+    let decodedId = match[1];
+    try {
+      decodedId = decodeURIComponent(match[1]);
+    } catch {
+      // 디코딩할 수 없으면 원문을 씁니다.
+    }
+    const isPrivate = /\/private-[^/]+\//i.test(url.pathname);
+    const shortId = shortenCalendarId(decodedId);
+    return isPrivate ? `${shortId} (비공개)` : shortId;
+  }
+  return url.hostname;
+}
+
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
-export function formatYMD(day: DayDate): string {
-  return `${String(day.year).padStart(4, "0")}${pad2(day.month)}${pad2(day.day)}`;
+export function formatDayKey(day: DayDate): string {
+  return `${String(day.year).padStart(4, "0")}-${pad2(day.month)}-${pad2(day.day)}`;
 }
 
-function decodeHtmlAmp(value: string): string {
-  return value.replace(/&amp;|&#38;|&#x26;/gi, "&").trim();
+export function calendarSignature(calendars: ChildCalendar[]): string {
+  return calendars.map((c) => `${c.url}\t${c.label}\t${c.color ?? ""}`).join("\n");
 }
 
-function parseCalendarURL(rawUrl: string): ParseCalendarResult {
-  let url: URL;
-  try {
-    url = new URL(decodeHtmlAmp(rawUrl));
-  } catch {
-    return { ok: false, message: "캘린더 주소 형식이 올바르지 않아요." };
-  }
-  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.hostname !== "calendar.google.com") {
-    return { ok: false, message: "Google 캘린더 주소(calendar.google.com)만 등록할 수 있어요." };
-  }
+function formatMinutes(min: number): string {
+  const clamped = Math.max(0, Math.min(1440, Math.round(min)));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${pad2(h)}:${pad2(m)}`;
+}
 
-  if (EMBED_PATH_RE.test(url.pathname)) {
-    const ctz = normalizeTimezone(url.searchParams.get("ctz"));
-    const entries: ParsedCalendarEntry[] = [];
-    const seen = new Set<string>();
-    let lastAdded: ParsedCalendarEntry | null = null;
-    url.searchParams.forEach((value, key) => {
-      if (key === "src") {
-        const src = value.trim();
-        if (!src || seen.has(src)) {
-          lastAdded = null;
-          return;
-        }
-        seen.add(src);
-        const entry: ParsedCalendarEntry = { src, ctz, color: null };
-        entries.push(entry);
-        lastAdded = entry;
-      } else if (key === "color" && lastAdded !== null && lastAdded.color === null) {
-        lastAdded.color = normalizeHexColor(value);
-      }
-    });
-    if (entries.length === 0) {
-      return { ok: false, message: "캘린더 주소에 src 값이 없어요." };
+export function formatEventTime(event: CalendarEvent): string {
+  if (event.allDay || event.startMin === null) return "종일";
+  const start = formatMinutes(event.startMin);
+  if (event.endMin !== null && event.endMin > event.startMin) {
+    return `${start}–${formatMinutes(event.endMin)}`;
+  }
+  return start;
+}
+
+export type EventStatus = "allDay" | "past" | "ongoing" | "next" | "upcoming";
+
+export interface ClassifiedCalendarEvent {
+  event: CalendarEvent;
+  status: EventStatus;
+}
+
+function compareEvents(a: CalendarEvent, b: CalendarEvent): number {
+  if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+  if (!a.allDay && !b.allDay) {
+    const aStart = a.startMin ?? 0;
+    const bStart = b.startMin ?? 0;
+    if (aStart !== bStart) return aStart - bStart;
+    const aEnd = a.endMin ?? aStart;
+    const bEnd = b.endMin ?? bStart;
+    if (aEnd !== bEnd) return aEnd - bEnd;
+  }
+  return a.title < b.title ? -1 : a.title > b.title ? 1 : 0;
+}
+
+/** 오늘 일정을 시간순으로 정렬하고 현재 시각 기준 상태(종일·지남·진행 중·다음·예정)를 매깁니다. */
+export function classifyTodayEvents(events: CalendarEvent[], now: Date): ClassifiedCalendarEvent[] {
+  const sorted = events.slice().sort(compareEvents);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  let nextStartMin: number | null = null;
+  for (const ev of sorted) {
+    if (ev.allDay || ev.startMin === null) continue;
+    if (ev.startMin > nowMin) {
+      nextStartMin = ev.startMin;
+      break;
     }
-    return { ok: true, entries };
   }
 
-  const icalMatch = url.pathname.match(ICAL_PATH_RE);
-  if (icalMatch && icalMatch[1]) {
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(icalMatch[1]).trim();
-    } catch {
-      return { ok: false, message: "캘린더 주소 형식이 올바르지 않아요." };
+  return sorted.map((ev) => {
+    if (ev.allDay || ev.startMin === null) {
+      return { event: ev, status: "allDay" };
     }
-    if (!decoded) {
-      return { ok: false, message: "캘린더 주소에 src 값이 없어요." };
+    const effectiveEnd = ev.endMin !== null && ev.endMin > ev.startMin ? ev.endMin : ev.startMin + 1;
+    if (nowMin >= ev.startMin && nowMin < effectiveEnd) {
+      return { event: ev, status: "ongoing" };
     }
-    return { ok: true, entries: [{ src: decoded, ctz: DEFAULT_CALENDAR_TZ, color: null }] };
-  }
-
-  return { ok: false, message: "Google 캘린더 퍼가기(embed) 코드를 넣어 주세요." };
-}
-
-/** 사용자가 붙여 넣은 Google 캘린더 iframe 코드, URL 또는 캘린더 ID를 파싱합니다. */
-export function parseCalendarInput(input: string): ParseCalendarResult {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    return { ok: false, message: "구글 캘린더 iframe 코드나 주소를 입력해 주세요." };
-  }
-  if (IFRAME_TAG_RE.test(trimmed)) {
-    const match = trimmed.match(IFRAME_SRC_RE);
-    const srcAttr = match ? (match[1] ?? match[2] ?? match[3] ?? "") : "";
-    if (!srcAttr.trim()) {
-      return { ok: false, message: "iframe 코드에서 src 주소를 찾을 수 없어요." };
+    if (nowMin >= effectiveEnd) {
+      return { event: ev, status: "past" };
     }
-    return parseCalendarURL(srcAttr);
-  }
-  if (/^https?:\/\//i.test(trimmed)) {
-    return parseCalendarURL(trimmed);
-  }
-  if (BARE_ID_RE.test(trimmed)) {
-    return { ok: true, entries: [{ src: trimmed, ctz: DEFAULT_CALENDAR_TZ, color: null }] };
-  }
-  return { ok: false, message: "Google 캘린더 iframe 코드나 주소를 넣어 주세요." };
-}
-
-/** 등록된 캘린더 목록과 날짜로 오늘 일정만 표시하는 Google Calendar AGENDA 임베드 URL을 만듭니다. */
-export function buildTodayAgendaEmbedURL(calendars: ChildCalendar[], day: DayDate): string | null {
-  if (calendars.length === 0) return null;
-  const ymd = formatYMD(day);
-  const params = new URLSearchParams();
-  params.set("mode", "AGENDA");
-  params.set("dates", `${ymd}/${ymd}`);
-  params.set("ctz", normalizeTimezone(calendars[0]!.ctz));
-  params.set("hl", "ko");
-  params.set("wkst", "1");
-  params.set("showTitle", "0");
-  params.set("showNav", "0");
-  params.set("showDate", "0");
-  params.set("showPrint", "0");
-  params.set("showTabs", "0");
-  params.set("showCalendars", "0");
-  params.set("showTz", "0");
-  for (const cal of calendars) {
-    params.append("src", cal.src);
-    const color = normalizeHexColor(cal.color);
-    if (color) params.append("color", color);
-  }
-  return `${CALENDAR_EMBED_BASE}?${params.toString()}`;
-}
-
-/** 긴 Google Calendar ID를 부모 모드에서 읽기 쉽게 줄입니다. */
-export function shortCalendarSrc(src: string): string {
-  const atIndex = src.indexOf("@");
-  if (atIndex <= 14) return src;
-  return `${src.slice(0, 12)}…${src.slice(atIndex)}`;
+    if (nextStartMin !== null && ev.startMin === nextStartMin) {
+      return { event: ev, status: "next" };
+    }
+    return { event: ev, status: "upcoming" };
+  });
 }

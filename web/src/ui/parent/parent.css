@@ -155,6 +155,10 @@
 .p-textarea:focus { outline: 2px solid var(--p-accent); outline-offset: 0; }
 
 /* 자녀별 구글 캘린더 */
+.cal-warn {
+  padding: 10px 14px; border-radius: 12px; background: #fff1cf; color: #7a5400;
+  font-size: 15px; font-weight: 700; line-height: 1.4;
+}
 .cal-empty {
   padding: 14px 16px; border: 1px solid var(--p-line); border-radius: 12px;
   background: var(--p-card); font-size: 16px; font-weight: 600; color: var(--p-muted);
@@ -178,9 +182,23 @@
   display: flex; flex-direction: column; gap: 8px; padding: 14px;
   border: 1px solid var(--p-line); border-radius: 14px; background: rgba(255, 255, 255, 0.55);
 }
-.cal-label-input { width: 100%; min-height: 46px; font-size: 17px; }
+.cal-add-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cal-label-input { flex: 1 1 260px; min-width: 0; min-height: 46px; font-size: 17px; }
+.cal-color-choices { display: flex; align-items: center; gap: 8px; }
+.cal-color-btn {
+  width: 30px; height: 30px; padding: 0; border: 2px solid transparent; border-radius: 50%;
+}
+.cal-color-btn.on { border-color: var(--ink); box-shadow: 0 0 0 2px #fff inset; }
+.cal-url-input { width: 100%; min-width: 0; min-height: 48px; font-size: 16px; }
 .cal-add-actions { display: flex; justify-content: flex-start; }
 .cal-guide { font-size: 14px; font-weight: 600; color: var(--p-muted); line-height: 1.45; }
+.cal-proxy-section {
+  margin-top: 24px; padding: 16px; border: 1px solid var(--p-line); border-radius: 16px;
+  background: var(--p-card); display: flex; flex-direction: column; gap: 10px;
+}
+.cal-proxy-title { font-size: 18px; font-weight: 800; }
+.cal-proxy-row { display: flex; gap: 10px; align-items: center; }
+.cal-proxy-input { flex: 1; min-width: 0; min-height: 48px; font-size: 16px; }
 .time-select { display: inline-flex; gap: 6px; }
 .p-select {
   min-height: 48px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--p-line);

@@ -1,5 +1,10 @@
 import { useEffect, useState } from "preact/hooks";
-import { parseCalendarInput, shortCalendarSrc } from "../../core/calendar";
+import {
+  CALENDAR_COLOR_PRESETS,
+  maskCalendarUrl,
+  parseIcalUrlInput,
+  parseProxyUrlInput,
+} from "../../core/calendar";
 import type { ChildCalendar, ChildInfo } from "../../core/domain";
 import { defaultNewID } from "../../store/boardStore";
 import type { BoardStore } from "../../store/boardStore";
@@ -26,31 +31,24 @@ interface Draft {
   calendars: ChildCalendar[];
 }
 
-function appendParsedCalendars(
+function appendParsedCalendar(
   existing: ChildCalendar[],
-  rawInput: string,
+  rawUrl: string,
   rawLabel: string,
+  color: string,
 ): { ok: true; next: ChildCalendar[] } | { ok: false; message: string } {
-  const parsed = parseCalendarInput(rawInput);
+  const parsed = parseIcalUrlInput(rawUrl);
   if (!parsed.ok) return parsed;
-  const label = rawLabel.trim();
-  const seen = new Set(existing.map((c) => c.src));
-  const added: ChildCalendar[] = [];
-  for (const entry of parsed.entries) {
-    if (seen.has(entry.src)) continue;
-    seen.add(entry.src);
-    added.push({
-      id: defaultNewID(),
-      src: entry.src,
-      ctz: entry.ctz,
-      label,
-      color: entry.color,
-    });
-  }
-  if (added.length === 0) {
+  if (existing.some((c) => c.url === parsed.url)) {
     return { ok: false, message: "이미 등록된 캘린더예요." };
   }
-  return { ok: true, next: existing.concat(added) };
+  const entry: ChildCalendar = {
+    id: defaultNewID(),
+    url: parsed.url,
+    label: rawLabel.trim(),
+    color,
+  };
+  return { ok: true, next: existing.concat([entry]) };
 }
 
 function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void }) {
@@ -58,12 +56,16 @@ function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void 
   const [draft, setDraft] = useState(props.draft);
   const [calLabel, setCalLabel] = useState("");
   const [calInput, setCalInput] = useState("");
+  const [calColor, setCalColor] = useState(
+    CALENDAR_COLOR_PRESETS[props.draft.calendars.length % CALENDAR_COLOR_PRESETS.length]!,
+  );
   const [calError, setCalError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const name = draft.name.trim();
   const canSave = name.length > 0 && !busy;
+  const hasProxy = store.settings().calendarProxyUrl !== null;
 
   const run = (work: () => Promise<unknown>) => {
     setBusy(true);
@@ -81,7 +83,7 @@ function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void 
   };
 
   const addCalendar = () => {
-    const res = appendParsedCalendars(draft.calendars, calInput, calLabel);
+    const res = appendParsedCalendar(draft.calendars, calInput, calLabel, calColor);
     if (!res.ok) {
       setCalError(res.message);
       return;
@@ -89,6 +91,7 @@ function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void 
     setCalError(null);
     setCalLabel("");
     setCalInput("");
+    setCalColor(CALENDAR_COLOR_PRESETS[res.next.length % CALENDAR_COLOR_PRESETS.length]!);
     setDraft({ ...draft, calendars: res.next });
   };
 
@@ -101,7 +104,7 @@ function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void 
     if (!canSave) return;
     let calendars = draft.calendars;
     if (calInput.trim()) {
-      const res = appendParsedCalendars(calendars, calInput, calLabel);
+      const res = appendParsedCalendar(calendars, calInput, calLabel, calColor);
       if (!res.ok) {
         setCalError(res.message);
         return;
@@ -180,19 +183,24 @@ function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void 
         </div>
       </div>
       <div class="p-field">
-        <span class="p-label">구글 캘린더 (오늘 일정)</span>
+        <span class="p-label">구글 캘린더 (iCal 비공개 주소)</span>
+        {!hasProxy && (
+          <div class="cal-warn">
+            자녀 관리 화면 아래에서 ‘캘린더 프록시 주소’를 먼저 등록하면 보드에 오늘 일정이 보여요.
+          </div>
+        )}
         {draft.calendars.length === 0 ? (
           <div class="cal-empty">등록된 캘린더가 없어요.</div>
         ) : (
           <div class="cal-list">
             {draft.calendars.map((cal) => {
-              const title = cal.label || shortCalendarSrc(cal.src);
+              const title = cal.label || maskCalendarUrl(cal.url);
               return (
                 <div class="cal-row" key={cal.id}>
-                  {cal.color && <span class="cal-dot" style={{ background: cal.color }} />}
+                  <span class="cal-dot" style={{ background: cal.color ?? "#3B82C4" }} />
                   <div class="cal-info">
                     <div class="cal-title">{title}</div>
-                    {cal.label && <div class="cal-src">{shortCalendarSrc(cal.src)}</div>}
+                    {cal.label && <div class="cal-src">{maskCalendarUrl(cal.url)}</div>}
                   </div>
                   <button
                     type="button"
@@ -208,24 +216,39 @@ function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void 
           </div>
         )}
         <div class="cal-add-box">
+          <div class="cal-add-top">
+            <input
+              class="p-input cal-label-input"
+              type="text"
+              value={calLabel}
+              placeholder="캘린더 이름 (예: 학교, 학원 — 비워도 돼요)"
+              maxLength={20}
+              aria-label="캘린더 이름"
+              onInput={(e) => setCalLabel((e.currentTarget as HTMLInputElement).value)}
+            />
+            <div class="cal-color-choices">
+              {CALENDAR_COLOR_PRESETS.map((c, idx) => (
+                <button
+                  type="button"
+                  key={c}
+                  class={calColor === c ? "cal-color-btn on" : "cal-color-btn"}
+                  style={{ background: c }}
+                  aria-label={`색 ${idx + 1}`}
+                  aria-pressed={calColor === c}
+                  onClick={() => setCalColor(c)}
+                />
+              ))}
+            </div>
+          </div>
           <input
-            class="p-input cal-label-input"
-            type="text"
-            value={calLabel}
-            placeholder="캘린더 이름 (예: 학교, 학원 — 비워도 돼요)"
-            maxLength={20}
-            aria-label="캘린더 이름"
-            onInput={(e) => setCalLabel((e.currentTarget as HTMLInputElement).value)}
-          />
-          <textarea
-            class="p-textarea"
-            rows={3}
+            class="p-input cal-url-input"
+            type="url"
             value={calInput}
-            placeholder='<iframe src="https://calendar.google.com/calendar/embed?src=..." ...></iframe>'
-            aria-label="구글 캘린더 코드"
+            placeholder="https://calendar.google.com/calendar/ical/.../private-.../basic.ics"
+            aria-label="구글 캘린더 iCal 주소"
             onInput={(e) => {
               setCalError(null);
-              setCalInput((e.currentTarget as HTMLTextAreaElement).value);
+              setCalInput((e.currentTarget as HTMLInputElement).value);
             }}
           />
           <div class="cal-add-actions">
@@ -235,7 +258,7 @@ function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void 
           </div>
           <ErrorLine text={calError} />
           <div class="cal-guide">
-            Google 캘린더 설정에서 공개로 켠 뒤 ‘퍼가기 코드(&lt;iframe ...&gt;)’ 또는 주소를 붙여 넣으세요. 여러 개를 등록할 수 있어요.
+            Google 캘린더 설정 &gt; 캘린더 통합에서 ‘iCal 형식의 비공개 주소’를 복사해 붙여 넣으세요. 여러 개를 등록할 수 있어요.
           </div>
         </div>
       </div>
@@ -267,6 +290,11 @@ export function ChildrenEditor({ store }: { store: BoardStore }) {
   const [, setVersion] = useState(0);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [proxyInput, setProxyInput] = useState(() => store.settings().calendarProxyUrl ?? "");
+  const [proxyError, setProxyError] = useState<string | null>(null);
+  const [proxyMessage, setProxyMessage] = useState<string | null>(null);
+  const [proxyBusy, setProxyBusy] = useState(false);
+
   useEffect(() => store.subscribe(() => setVersion((v) => v + 1)), [store]);
   const children = store.snapshot().children;
 
@@ -286,6 +314,30 @@ export function ChildrenEditor({ store }: { store: BoardStore }) {
       order: children.length,
       calendars: [],
     });
+
+  const saveProxy = () => {
+    if (proxyBusy) return;
+    const parsed = parseProxyUrlInput(proxyInput);
+    if (!parsed.ok) {
+      setProxyMessage(null);
+      setProxyError(parsed.message);
+      return;
+    }
+    setProxyError(null);
+    setProxyMessage(null);
+    setProxyBusy(true);
+    store.setCalendarProxyUrl(parsed.url).then(
+      () => {
+        setProxyBusy(false);
+        setProxyInput(parsed.url ?? "");
+        setProxyMessage(parsed.url ? "프록시 주소를 저장했어요" : "프록시 주소를 지웠어요");
+      },
+      (err: unknown) => {
+        setProxyBusy(false);
+        setProxyError(errorText(err));
+      },
+    );
+  };
 
   return (
     <div class="p-section">
@@ -325,6 +377,36 @@ export function ChildrenEditor({ store }: { store: BoardStore }) {
         ＋ 자녀 추가
       </button>
       <div class="p-footnote">보드에는 위에서부터 {MAX_PANELS}명만 보여요. ▲▼로 순서를 바꿀 수 있어요.</div>
+
+      <div class="cal-proxy-section">
+        <div class="cal-proxy-title">구글 캘린더 프록시 주소</div>
+        <div class="cal-proxy-row">
+          <input
+            class="p-input cal-proxy-input"
+            type="url"
+            value={proxyInput}
+            placeholder="https://script.google.com/macros/s/.../exec"
+            aria-label="캘린더 프록시 주소"
+            onInput={(e) => {
+              setProxyError(null);
+              setProxyMessage(null);
+              setProxyInput((e.currentTarget as HTMLInputElement).value);
+            }}
+          />
+          <button type="button" class="p-button primary" disabled={proxyBusy} onClick={saveProxy}>
+            저장
+          </button>
+        </div>
+        <ErrorLine text={proxyError} />
+        {proxyMessage && (
+          <div class="p-ok" role="status">
+            {proxyMessage}
+          </div>
+        )}
+        <div class="cal-guide">
+          비공개 iCal 주소를 불러오려면 개인 프록시(Google Apps Script 또는 Cloudflare Worker) 주소가 필요해요. 자세한 방법은 설치 안내(INSTALL.md)를 참고하세요.
+        </div>
+      </div>
     </div>
   );
 }

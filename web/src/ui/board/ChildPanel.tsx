@@ -168,7 +168,7 @@ export function ChildPanel({ store, clock, state, data, onSaveError }: ChildPane
       {hasCalendars ? (
         <div class="panel-content">
           {taskList}
-          <TodayCalendar childName={child.name} calendars={child.calendars} day={state.day} />
+          <TodayCalendar store={store} clock={clock} child={child} day={state.day} now={clock.now()} />
         </div>
       ) : (
         taskList

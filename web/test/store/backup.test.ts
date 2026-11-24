@@ -142,19 +142,21 @@ test("backupWithMalformedSoundStillRestores", () => {
 
 test("exportAndRestoreRoundTripsMultipleCalendars", async () => {
   const source = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID("src"));
+  await source.setCalendarProxyUrl("https://script.google.com/macros/s/test/exec");
   await source.addChild("하나", "🐱", "mint", [
-    { id: "c1", src: "school@group.calendar.google.com", ctz: "Asia/Seoul", label: "학교", color: "#039BE5" },
-    { id: "c2", src: "piano@group.calendar.google.com", ctz: "Asia/Seoul", label: "피아노", color: null },
+    { id: "c1", url: "https://calendar.google.com/calendar/ical/school%40group.calendar.google.com/private-a/basic.ics", label: "학교", color: "#039BE5" },
+    { id: "c2", url: "https://calendar.google.com/calendar/ical/piano%40group.calendar.google.com/private-b/basic.ics", label: "피아노", color: null },
   ]);
   const parsed = parseBackup(exportBackup(source.doc(), at(2026, 11, 19, 7)).json);
   if (!parsed.ok) throw new Error("parse failed");
 
   const target = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID("dst"));
   await target.restore(parsed.doc);
+  expect(target.settings().calendarProxyUrl).toBe("https://script.google.com/macros/s/test/exec");
   expect(target.snapshot().children[0]!.calendars).toHaveLength(2);
-  expect(target.snapshot().children[0]!.calendars.map((c) => c.src)).toEqual([
-    "school@group.calendar.google.com",
-    "piano@group.calendar.google.com",
+  expect(target.snapshot().children[0]!.calendars.map((c) => c.url)).toEqual([
+    "https://calendar.google.com/calendar/ical/school%40group.calendar.google.com/private-a/basic.ics",
+    "https://calendar.google.com/calendar/ical/piano%40group.calendar.google.com/private-b/basic.ics",
   ]);
 });
 

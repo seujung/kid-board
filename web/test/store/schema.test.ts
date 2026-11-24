@@ -16,8 +16,7 @@ function validDoc() {
           calendars: [
             {
               id: "cal1",
-              src: "kid@group.calendar.google.com",
-              ctz: "Asia/Seoul",
+              url: "https://calendar.google.com/calendar/ical/kid%40group.calendar.google.com/private-secret/basic.ics",
               label: "학교",
               color: "#039BE5",
             },
@@ -49,8 +48,19 @@ function validDoc() {
         { id: "d2", start: { hour: 23, minute: 30 }, end: { hour: 6, minute: 0 }, weekdays: [6, 7] },
       ],
       sound: { enabled: false, volume: "high" },
+      calendarProxyUrl: "https://script.google.com/macros/s/abc/exec",
     },
     weather: { temperature: 1, weatherCode: 2, high: 3, low: 0, precipitationProbability: 10, fetchedAt: 4 },
+    calendarCache: {
+      c1: {
+        dayKey: "2026-11-19",
+        signature: "sig",
+        fetchedAt: 10,
+        events: [
+          { id: "e1", title: "수영", allDay: false, startMin: 900, endMin: 960, calendarLabel: "학교", calendarColor: "#039BE5" },
+        ],
+      },
+    },
   };
 }
 
@@ -76,8 +86,10 @@ test("emptyDocShape", () => {
       { id: "default-night", start: { hour: 22, minute: 0 }, end: { hour: 6, minute: 0 }, weekdays: [1, 2, 3, 4, 5, 6, 7] },
     ],
     sound: { enabled: true, volume: "medium" },
+    calendarProxyUrl: null,
   });
   expect(doc.weather).toBeNull();
+  expect(doc.calendarCache).toEqual({});
   expect(emptyDoc().settings.dimPeriods).not.toBe(doc.settings.dimPeriods);
   expect(emptyDoc()).not.toBe(doc);
   expect(emptyDoc().data.children).not.toBe(doc.data.children);
@@ -169,7 +181,7 @@ test("migrateRejectsBadStructure", () => {
     (d) => ((d.settings.dimPeriods[0] as { end: unknown }).end = null),
     (d) => ((d.settings.dimPeriods[0] as { weekdays: unknown }).weekdays = [8]),
     (d) => ((d.data.children[0] as { calendars: unknown }).calendars = {}),
-    (d) => ((d.data.children[0]!.calendars[0] as { src: unknown }).src = ""),
+    (d) => ((d.data.children[0]!.calendars[0] as { url: unknown }).url = ""),
     (d) => ((d.data.children[0]!.calendars[0] as { id: unknown }).id = 123),
   ];
   mutations.forEach((mutate, i) => {
@@ -228,17 +240,26 @@ test("migrateFillsMissingCalendarsWithEmptyArray", () => {
   expect(result.doc.data.children[0]!.calendars).toEqual([]);
 });
 
-test("migrateKeepsMultipleCalendarsAndNormalizesDefaults", () => {
+test("migrateKeepsMultipleCalendarsAndMigratesLegacySrc", () => {
   const raw = validDoc();
   (raw.data.children[0] as { calendars: unknown }).calendars = [
     { id: "a", src: "one@group.calendar.google.com" },
-    { id: "b", src: "two@group.calendar.google.com", ctz: "bad tz", label: "학원", color: "#d50000" },
+    { id: "b", url: "https://calendar.google.com/calendar/ical/two%40group.calendar.google.com/private-xyz/basic.ics", label: "학원", color: "#d50000" },
   ];
   const result = migrate(raw);
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   expect(result.doc.data.children[0]!.calendars).toEqual([
-    { id: "a", src: "one@group.calendar.google.com", ctz: "Asia/Seoul", label: "", color: null },
-    { id: "b", src: "two@group.calendar.google.com", ctz: "Asia/Seoul", label: "학원", color: "#D50000" },
+    { id: "a", url: "https://calendar.google.com/calendar/ical/one%40group.calendar.google.com/public/basic.ics", label: "", color: null },
+    { id: "b", url: "https://calendar.google.com/calendar/ical/two%40group.calendar.google.com/private-xyz/basic.ics", label: "학원", color: "#D50000" },
   ]);
+});
+
+test("migrateDropsMalformedCalendarCacheWithoutCorrupt", () => {
+  const raw = validDoc() as Record<string, unknown>;
+  raw.calendarCache = { bad: { dayKey: 123 } };
+  const result = migrate(raw);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.doc.calendarCache).toEqual({});
 });

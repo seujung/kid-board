@@ -1,7 +1,9 @@
-import { DEFAULT_CALENDAR_TZ, normalizeHexColor, normalizeTimezone } from "../core/calendar";
+import { normalizeHexColor } from "../core/calendar";
 import type { DayDate, TimeOfDay } from "../core/dayDate";
 import type {
   BoardData,
+  CalendarCacheEntry,
+  CalendarEvent,
   ChildCalendar,
   ChildInfo,
   CompletionInfo,
@@ -46,6 +48,8 @@ export interface Settings {
   dimPeriods: DimPeriod[];
   /** 완료 소리입니다. 없거나 형식이 틀리면 기본값(켜기, 보통)으로 읽습니다. */
   sound: SoundSettings;
+  /** iCal(.ics) 조회에 쓰는 개인 CORS 프록시 주소입니다. */
+  calendarProxyUrl: string | null;
 }
 
 export interface AppDoc {
@@ -53,6 +57,7 @@ export interface AppDoc {
   data: BoardData;
   settings: Settings;
   weather: WeatherSnapshot | null;
+  calendarCache: Record<string, CalendarCacheEntry>;
 }
 
 export function emptyDoc(): AppDoc {
@@ -71,8 +76,10 @@ export function emptyDoc(): AppDoc {
       lastBackupAt: null,
       dimPeriods: defaultDimPeriods(),
       sound: defaultSound(),
+      calendarProxyUrl: null,
     },
     weather: null,
+    calendarCache: {},
   };
 }
 
@@ -138,12 +145,14 @@ function weekday(v: unknown): Weekday {
 
 function childCalendar(v: unknown): ChildCalendar {
   const o = obj(v);
-  const src = str(o.src).trim();
-  if (!src) fail();
+  let url = typeof o.url === "string" ? o.url.trim() : "";
+  if (!url && o.url === undefined && typeof o.src === "string" && o.src.trim()) {
+    url = `https://calendar.google.com/calendar/ical/${encodeURIComponent(o.src.trim())}/public/basic.ics`;
+  }
+  if (!url) fail();
   return {
     id: str(o.id),
-    src,
-    ctz: normalizeTimezone(optional(o.ctz, str, DEFAULT_CALENDAR_TZ)),
+    url,
     label: optional(o.label, str, ""),
     color: normalizeHexColor(optional(o.color, nullable(str), null)),
   };
@@ -273,6 +282,7 @@ function settings(v: unknown): Settings {
     lastBackupAt: optional(o.lastBackupAt, nullable(num), null),
     dimPeriods: optional(o.dimPeriods, dimPeriods, defaultDimPeriods()),
     sound: soundOrDefault(o.sound),
+    calendarProxyUrl: optional(o.calendarProxyUrl, nullable(str), null),
   };
 }
 
@@ -285,6 +295,43 @@ function weatherCache(v: unknown): WeatherSnapshot | null {
     if (e instanceof Invalid) return null;
     throw e;
   }
+}
+
+function calendarEvent(v: unknown): CalendarEvent {
+  const o = obj(v);
+  return {
+    id: str(o.id),
+    title: str(o.title),
+    allDay: bool(o.allDay),
+    startMin: optional(o.startMin, nullable(num), null),
+    endMin: optional(o.endMin, nullable(num), null),
+    calendarLabel: optional(o.calendarLabel, str, ""),
+    calendarColor: normalizeHexColor(optional(o.calendarColor, nullable(str), null)),
+  };
+}
+
+function calendarCacheEntry(v: unknown): CalendarCacheEntry {
+  const o = obj(v);
+  return {
+    dayKey: str(o.dayKey),
+    signature: str(o.signature),
+    fetchedAt: num(o.fetchedAt),
+    events: arr(o.events).map(calendarEvent),
+  };
+}
+
+/** 캘린더 일정도 캐시이므로 형식이 틀리면 버립니다. */
+function calendarCache(v: unknown): Record<string, CalendarCacheEntry> {
+  if (v === undefined || v === null || typeof v !== "object" || Array.isArray(v)) return {};
+  const out: Record<string, CalendarCacheEntry> = {};
+  for (const [key, raw] of Object.entries(v as Obj)) {
+    try {
+      out[key] = calendarCacheEntry(raw);
+    } catch (e) {
+      if (!(e instanceof Invalid)) throw e;
+    }
+  }
+  return out;
 }
 
 function readV1(o: Obj): AppDoc {
@@ -300,6 +347,7 @@ function readV1(o: Obj): AppDoc {
     },
     settings: settings(o.settings),
     weather: weatherCache(o.weather),
+    calendarCache: calendarCache(o.calendarCache),
   };
 }
 

@@ -1,96 +1,83 @@
 import { expect, test } from "vitest";
 import {
-  buildTodayAgendaEmbedURL,
-  DEFAULT_CALENDAR_TZ,
-  formatYMD,
-  parseCalendarInput,
-  shortCalendarSrc,
+  buildProxyRequestURL,
+  classifyTodayEvents,
+  formatDayKey,
+  formatEventTime,
+  maskCalendarUrl,
+  parseIcalUrlInput,
+  parseProxyUrlInput,
 } from "../../src/core/calendar";
-import type { ChildCalendar } from "../../src/core/domain";
+import type { CalendarEvent } from "../../src/core/domain";
+import { at } from "../support";
 
-const SAMPLE_IFRAME =
-  '<iframe src="https://calendar.google.com/calendar/embed?src=15ba96fff7869d387b82de14901466134c4291a0c3f7523411471c4e1cbd16ce%40group.calendar.google.com&ctz=Asia%2FSeoul" style="border: 0" width="800" height="600" frameborder="0" scrolling="no"></iframe>';
+const PRIVATE_ICAL =
+  "https://calendar.google.com/calendar/ical/15ba96fff7869d387b82de14901466134c4291a0c3f7523411471c4e1cbd16ce%40group.calendar.google.com/private-abc123secret/basic.ics";
 
-const SAMPLE_ID = "15ba96fff7869d387b82de14901466134c4291a0c3f7523411471c4e1cbd16ce@group.calendar.google.com";
-
-test("parsesGoogleCalendarIframeSnippet", () => {
-  const res = parseCalendarInput(SAMPLE_IFRAME);
-  expect(res).toEqual({
+test("parsesValidGoogleIcalUrlsAndRejectsIframeOrNonHttps", () => {
+  expect(parseIcalUrlInput(PRIVATE_ICAL)).toEqual({ ok: true, url: PRIVATE_ICAL });
+  expect(
+    parseIcalUrlInput("https://calendar.google.com/calendar/ical/kid%40gmail.com/public/basic.ics"),
+  ).toEqual({
     ok: true,
-    entries: [{ src: SAMPLE_ID, ctz: "Asia/Seoul", color: null }],
+    url: "https://calendar.google.com/calendar/ical/kid%40gmail.com/public/basic.ics",
   });
+
+  expect(parseIcalUrlInput("")).toMatchObject({ ok: false });
+  expect(parseIcalUrlInput('<iframe src="https://calendar.google.com/calendar/embed?src=a"></iframe>')).toMatchObject({
+    ok: false,
+  });
+  expect(parseIcalUrlInput("http://calendar.google.com/calendar/ical/a/public/basic.ics")).toMatchObject({
+    ok: false,
+  });
+  expect(parseIcalUrlInput("https://example.com/calendar")).toMatchObject({ ok: false });
 });
 
-test("parsesHtmlEncodedAmpersandsAndSingleQuotes", () => {
-  const html = `<iframe src='https://calendar.google.com/calendar/embed?src=school%40group.calendar.google.com&amp;ctz=America%2FNew_York&amp;color=%23039be5'></iframe>`;
-  expect(parseCalendarInput(html)).toEqual({
+test("parsesProxyUrlAndBuildsRequestUrl", () => {
+  expect(parseProxyUrlInput("")).toEqual({ ok: true, url: null });
+  expect(parseProxyUrlInput("https://script.google.com/macros/s/abc/exec")).toEqual({
     ok: true,
-    entries: [{ src: "school@group.calendar.google.com", ctz: "America/New_York", color: "#039BE5" }],
+    url: "https://script.google.com/macros/s/abc/exec",
   });
+  expect(parseProxyUrlInput("http://localhost:8787/ics")).toEqual({
+    ok: true,
+    url: "http://localhost:8787/ics",
+  });
+  expect(parseProxyUrlInput("http://evil.example.com/proxy")).toMatchObject({ ok: false });
+
+  const built = buildProxyRequestURL("https://script.google.com/macros/s/abc/exec", PRIVATE_ICAL);
+  expect(new URL(built).searchParams.get("url")).toBe(PRIVATE_ICAL);
 });
 
-test("parsesMultipleSrcsAndColorsFromSingleEmbed", () => {
-  const url =
-    "https://calendar.google.com/calendar/embed?ctz=Asia%2FSeoul&src=a%40group.calendar.google.com&color=%23d50000&src=b%40group.calendar.google.com&color=%230b8043&src=a%40group.calendar.google.com";
-  expect(parseCalendarInput(url)).toEqual({
-    ok: true,
-    entries: [
-      { src: "a@group.calendar.google.com", ctz: "Asia/Seoul", color: "#D50000" },
-      { src: "b@group.calendar.google.com", ctz: "Asia/Seoul", color: "#0B8043" },
-    ],
-  });
+test("masksSecretTokenInCalendarUrl", () => {
+  const masked = maskCalendarUrl(PRIVATE_ICAL);
+  expect(masked).toBe("15ba96fff786…@group.calendar.google.com (비공개)");
+  expect(masked).not.toContain("private-abc123secret");
+  expect(maskCalendarUrl("https://calendar.google.com/calendar/ical/school%40group.calendar.google.com/public/basic.ics")).toBe(
+    "school@group.calendar.google.com",
+  );
 });
 
-test("parsesIcalUrlAndBareCalendarId", () => {
-  expect(parseCalendarInput("https://calendar.google.com/calendar/ical/kid%40group.calendar.google.com/public/basic.ics")).toEqual({
-    ok: true,
-    entries: [{ src: "kid@group.calendar.google.com", ctz: DEFAULT_CALENDAR_TZ, color: null }],
-  });
-  expect(parseCalendarInput("kid@group.calendar.google.com")).toEqual({
-    ok: true,
-    entries: [{ src: "kid@group.calendar.google.com", ctz: DEFAULT_CALENDAR_TZ, color: null }],
-  });
-});
-
-test("rejectsInvalidCalendarInputs", () => {
-  const bad = [
-    "",
-    "   ",
-    "<iframe></iframe>",
-    '<iframe src="https://evil.com/calendar/embed?src=a@b.com"></iframe>',
-    '<iframe src="javascript:alert(1)"></iframe>',
-    "https://calendar.google.com/calendar/embed?ctz=Asia%2FSeoul",
-    "https://calendar.google.com/calendar/u/0/r",
-    "not a calendar",
+test("classifiesAndSortsTodayEventsByCurrentTime", () => {
+  const events: CalendarEvent[] = [
+    { id: "1", title: "저녁 수영", allDay: false, startMin: 18 * 60, endMin: 19 * 60, calendarLabel: "학원", calendarColor: null },
+    { id: "2", title: "등교 준비", allDay: false, startMin: 8 * 60, endMin: 8 * 60 + 30, calendarLabel: "학교", calendarColor: null },
+    { id: "3", title: "피아노", allDay: false, startMin: 15 * 60, endMin: 16 * 60, calendarLabel: "학원", calendarColor: null },
+    { id: "4", title: "영어", allDay: false, startMin: 16 * 60 + 30, endMin: 17 * 60 + 30, calendarLabel: "학원", calendarColor: null },
+    { id: "5", title: "현장학습", allDay: true, startMin: null, endMin: null, calendarLabel: "학교", calendarColor: null },
   ];
-  for (const input of bad) {
-    expect(parseCalendarInput(input).ok).toBe(false);
-  }
-});
 
-test("buildsTodayAgendaEmbedUrlForMultipleCalendarsAndUpdatesOnDateChange", () => {
-  expect(buildTodayAgendaEmbedURL([], { year: 2026, month: 11, day: 24 })).toBeNull();
+  // 현재 15:20: 현장학습(allDay), 등교 준비(past), 피아노(ongoing), 영어(next), 저녁 수영(upcoming)
+  const classified = classifyTodayEvents(events, at(2026, 11, 24, 15, 20));
+  expect(classified.map((c) => [c.event.title, c.status])).toEqual([
+    ["현장학습", "allDay"],
+    ["등교 준비", "past"],
+    ["피아노", "ongoing"],
+    ["영어", "next"],
+    ["저녁 수영", "upcoming"],
+  ]);
 
-  const calendars: ChildCalendar[] = [
-    { id: "1", src: SAMPLE_ID, ctz: "Asia/Seoul", label: "학교", color: null },
-    { id: "2", src: "academy@group.calendar.google.com", ctz: "Asia/Seoul", label: "학원", color: "#D50000" },
-  ];
-  const day1 = buildTodayAgendaEmbedURL(calendars, { year: 2026, month: 11, day: 24 })!;
-  const parsed = new URL(day1);
-  expect(parsed.origin + parsed.pathname).toBe("https://calendar.google.com/calendar/embed");
-  expect(parsed.searchParams.get("mode")).toBe("AGENDA");
-  expect(parsed.searchParams.get("dates")).toBe("20261124/20261124");
-  expect(parsed.searchParams.get("ctz")).toBe("Asia/Seoul");
-  expect(parsed.searchParams.get("hl")).toBe("ko");
-  expect(parsed.searchParams.getAll("src")).toEqual([SAMPLE_ID, "academy@group.calendar.google.com"]);
-  expect(parsed.searchParams.getAll("color")).toEqual(["#D50000"]);
-
-  const day2 = buildTodayAgendaEmbedURL(calendars, { year: 2026, month: 11, day: 25 })!;
-  expect(new URL(day2).searchParams.get("dates")).toBe("20261125/20261125");
-  expect(formatYMD({ year: 2026, month: 1, day: 5 })).toBe("20260105");
-});
-
-test("shortensLongCalendarSrc", () => {
-  expect(shortCalendarSrc(SAMPLE_ID)).toBe("15ba96fff786…@group.calendar.google.com");
-  expect(shortCalendarSrc("short@gmail.com")).toBe("short@gmail.com");
+  expect(formatEventTime(events[4]!)).toBe("종일");
+  expect(formatEventTime(events[2]!)).toBe("15:00–16:00");
+  expect(formatDayKey({ year: 2026, month: 1, day: 5 })).toBe("2026-01-05");
 });

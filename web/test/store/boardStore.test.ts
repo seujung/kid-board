@@ -148,14 +148,22 @@ test("childCalendarsPersistAndCopyDefensively", async () => {
   const storage = idbStorage(freshDBName());
   const store = await BoardStore.open(storage, () => at(2026, 11, 19, 7), counterID());
   const cals = [
-    { id: "cal-1", src: "school@group.calendar.google.com", ctz: "Asia/Seoul", label: "학교", color: "#039BE5" },
-    { id: "cal-2", src: "academy@group.calendar.google.com", ctz: "Asia/Seoul", label: "학원", color: null },
+    { id: "cal-1", url: "https://calendar.google.com/calendar/ical/school%40group.calendar.google.com/private-1/basic.ics", label: "학교", color: "#039BE5" },
+    { id: "cal-2", url: "https://calendar.google.com/calendar/ical/academy%40group.calendar.google.com/private-2/basic.ics", label: "학원", color: null },
   ];
   const id = await store.addChild("하나", "🐱", "mint", cals);
   cals[0]!.label = "바뀐 이름";
-  cals.push({ id: "cal-3", src: "extra@group.calendar.google.com", ctz: "Asia/Seoul", label: "", color: null });
+  cals.push({ id: "cal-3", url: "https://calendar.google.com/calendar/ical/extra%40group.calendar.google.com/private-3/basic.ics", label: "", color: null });
   expect(store.snapshot().children[0]!.calendars).toHaveLength(2);
   expect(store.snapshot().children[0]!.calendars[0]!.label).toBe("학교");
+
+  await store.setCalendarProxyUrl("https://script.google.com/macros/s/test/exec");
+  await store.setCalendarCache(id, {
+    dayKey: "2026-11-19",
+    signature: "sig",
+    fetchedAt: 100,
+    events: [{ id: "e1", title: "수학", allDay: false, startMin: 600, endMin: 660, calendarLabel: "학교", calendarColor: "#039BE5" }],
+  });
 
   await store.updateChild({
     id,
@@ -164,13 +172,15 @@ test("childCalendarsPersistAndCopyDefensively", async () => {
     themeColor: "mint",
     order: 0,
     calendars: [
-      { id: "cal-1", src: "school@group.calendar.google.com", ctz: "Asia/Seoul", label: "학교", color: "#039BE5" },
-      { id: "cal-2", src: "academy@group.calendar.google.com", ctz: "Asia/Seoul", label: "피아노", color: "#D50000" },
+      { id: "cal-1", url: "https://calendar.google.com/calendar/ical/school%40group.calendar.google.com/private-1/basic.ics", label: "학교", color: "#039BE5" },
+      { id: "cal-2", url: "https://calendar.google.com/calendar/ical/academy%40group.calendar.google.com/private-2/basic.ics", label: "피아노", color: "#D50000" },
     ],
   });
   const reopened = await BoardStore.open(storage, () => at(2026, 11, 19, 7), counterID());
   expect(reopened.snapshot().children[0]!.calendars).toHaveLength(2);
   expect(reopened.snapshot().children[0]!.calendars[1]!.label).toBe("피아노");
+  expect(reopened.settings().calendarProxyUrl).toBe("https://script.google.com/macros/s/test/exec");
+  expect(reopened.calendarCache(id)?.events[0]?.title).toBe("수학");
 });
 
 test("moveChildRewritesOrder", async () => {
