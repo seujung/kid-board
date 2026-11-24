@@ -7,7 +7,8 @@
  * - 앱이 `{type: "SKIP_WAITING"}`을 보낼 때만 바로 활성화합니다.
  *   앱을 닫았다 다시 열면 브라우저 기본 동작대로 새 워커가 활성화됩니다.
  * - 활성화: 이전 빌드의 캐시를 지웁니다.
- * - 같은 출처 GET 요청: 캐시 우선, 없으면 네트워크. 오프라인 화면 이동은 캐시한 index.html을 줍니다.
+ * - 같은 출처 화면 이동(navigate): 네트워크 우선(`cache: "no-cache"`), 오프라인이거나 실패하면 캐시한 index.html을 줍니다.
+ * - 같은 출처 정적 자산(JS·CSS·아이콘·매니페스트): 캐시 우선, 없으면 네트워크.
  * - 다른 출처 요청(Open-Meteo 날씨, 지역 검색)은 가로채지 않습니다.
  *
  * Safari 15에서 동작해야 합니다. 모듈 워커가 아니므로 import/export를 쓰지 않습니다.
@@ -71,19 +72,20 @@ sw.addEventListener("activate", (event) => {
 
 async function respond(request: Request): Promise<Response> {
   const cache = await caches.open(CACHE);
-  const navigate = request.mode === "navigate";
-  // `?fixedNow=`처럼 검색어가 붙은 화면 이동도 캐시한 페이지를 씁니다.
-  const hit = await cache.match(request, { ignoreSearch: navigate });
-  if (hit) return hit;
-  try {
-    return await fetch(request);
-  } catch (error) {
-    if (navigate) {
-      const index = await cache.match(INDEX);
-      if (index) return index;
+  if (request.mode === "navigate") {
+    try {
+      const fresh = await fetch(request.url, { cache: "no-cache" });
+      if (fresh.ok) return fresh;
+    } catch {
+      // 오프라인이면 캐시한 index.html을 돌려줍니다.
     }
-    throw error;
+    const index = await cache.match(INDEX);
+    if (index) return index;
+    return fetch(request);
   }
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  return fetch(request);
 }
 
 sw.addEventListener("fetch", (event) => {

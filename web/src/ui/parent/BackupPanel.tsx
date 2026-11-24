@@ -158,7 +158,6 @@ export function BackupPanel({ store, clock, onHold, restorePick, onPickHandled }
           백업에서 복원
         </label>
       </div>
-      <div class="p-footnote">PIN과 복구 코드는 백업에 넣지 않아요. 복원해도 지금 PIN을 그대로 써요.</div>
       {pending && (
         <Confirm title={RESTORE_CONFIRM} confirmLabel="바꾸기" danger onCancel={() => setPending(null)} onConfirm={restore} />
       )}
