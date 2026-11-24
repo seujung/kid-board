@@ -6,7 +6,24 @@ function validDoc() {
   return {
     schemaVersion: 1,
     data: {
-      children: [{ id: "c1", name: "첫째", avatar: "🐰", themeColor: "coral", order: 0 }],
+      children: [
+        {
+          id: "c1",
+          name: "첫째",
+          avatar: "🐰",
+          themeColor: "coral",
+          order: 0,
+          calendars: [
+            {
+              id: "cal1",
+              src: "kid@group.calendar.google.com",
+              ctz: "Asia/Seoul",
+              label: "학교",
+              color: "#039BE5",
+            },
+          ],
+        },
+      ],
       tasks: [
         { id: "t1", childID: "c1", title: "세수하기", icon: "🧼", order: 0, createdAt: 1, archivedOn: null },
         { id: "t2", childID: "c1", title: "책 읽기", icon: "📖", order: 1, createdAt: 2, archivedOn: { year: 2026, month: 11, day: 18 } },
@@ -151,6 +168,9 @@ test("migrateRejectsBadStructure", () => {
     (d) => ((d.settings.dimPeriods[0] as { start: unknown }).start = { hour: 24, minute: 0 }),
     (d) => ((d.settings.dimPeriods[0] as { end: unknown }).end = null),
     (d) => ((d.settings.dimPeriods[0] as { weekdays: unknown }).weekdays = [8]),
+    (d) => ((d.data.children[0] as { calendars: unknown }).calendars = {}),
+    (d) => ((d.data.children[0]!.calendars[0] as { src: unknown }).src = ""),
+    (d) => ((d.data.children[0]!.calendars[0] as { id: unknown }).id = 123),
   ];
   mutations.forEach((mutate, i) => {
     const doc = validDoc();
@@ -197,4 +217,28 @@ test("migrateMalformedSoundFallsBackToDefaultWithoutCorrupt", () => {
     // 다른 설정은 그대로 읽습니다.
     expect(result.ok && result.doc.settings.dimPeriods).toEqual(validDoc().settings.dimPeriods);
   }
+});
+
+test("migrateFillsMissingCalendarsWithEmptyArray", () => {
+  const raw = validDoc();
+  delete (raw.data.children[0] as { calendars?: unknown }).calendars;
+  const result = migrate(raw);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.doc.data.children[0]!.calendars).toEqual([]);
+});
+
+test("migrateKeepsMultipleCalendarsAndNormalizesDefaults", () => {
+  const raw = validDoc();
+  (raw.data.children[0] as { calendars: unknown }).calendars = [
+    { id: "a", src: "one@group.calendar.google.com" },
+    { id: "b", src: "two@group.calendar.google.com", ctz: "bad tz", label: "학원", color: "#d50000" },
+  ];
+  const result = migrate(raw);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.doc.data.children[0]!.calendars).toEqual([
+    { id: "a", src: "one@group.calendar.google.com", ctz: "Asia/Seoul", label: "", color: null },
+    { id: "b", src: "two@group.calendar.google.com", ctz: "Asia/Seoul", label: "학원", color: "#D50000" },
+  ]);
 });

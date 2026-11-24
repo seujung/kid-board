@@ -139,3 +139,31 @@ test("backupWithMalformedSoundStillRestores", () => {
   const parsed = parseBackup(JSON.stringify(old));
   expect(parsed.ok && parsed.doc.settings.sound).toEqual({ enabled: true, volume: "medium" });
 });
+
+test("exportAndRestoreRoundTripsMultipleCalendars", async () => {
+  const source = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID("src"));
+  await source.addChild("하나", "🐱", "mint", [
+    { id: "c1", src: "school@group.calendar.google.com", ctz: "Asia/Seoul", label: "학교", color: "#039BE5" },
+    { id: "c2", src: "piano@group.calendar.google.com", ctz: "Asia/Seoul", label: "피아노", color: null },
+  ]);
+  const parsed = parseBackup(exportBackup(source.doc(), at(2026, 11, 19, 7)).json);
+  if (!parsed.ok) throw new Error("parse failed");
+
+  const target = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID("dst"));
+  await target.restore(parsed.doc);
+  expect(target.snapshot().children[0]!.calendars).toHaveLength(2);
+  expect(target.snapshot().children[0]!.calendars.map((c) => c.src)).toEqual([
+    "school@group.calendar.google.com",
+    "piano@group.calendar.google.com",
+  ]);
+});
+
+test("restoreWithoutCalendarsDefaultsToEmpty", async () => {
+  const source = await BoardStore.open(new MemoryStorage(), () => at(2026, 11, 19, 7), counterID("src"));
+  await source.addChild("하나", "🐱", "mint");
+  const raw = JSON.parse(exportBackup(source.doc(), at(2026, 11, 19, 7)).json);
+  delete raw.data.children[0].calendars;
+  const parsed = parseBackup(JSON.stringify(raw));
+  if (!parsed.ok) throw new Error("parse failed");
+  expect(parsed.doc.data.children[0]!.calendars).toEqual([]);
+});

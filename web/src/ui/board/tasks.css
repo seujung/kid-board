@@ -128,3 +128,30 @@
 .dialog-no, .dialog-yes { padding: 10px 20px; border: 0; border-radius: 14px; font-size: 18px; font-weight: 800; }
 .dialog-no { background: #eee; }
 .dialog-yes { background: var(--stamp-red); color: #fff; }
+
+/* 자녀 패널의 오늘 일정(Google 캘린더 임베드) */
+.panel-content { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.panel-content .day-list { margin-top: 0; flex: 1 1 0; min-height: 150px; }
+.calendar-section { flex: 0 0 184px; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.panels.single .panel-content { flex-direction: row; gap: 12px; }
+.panels.single .panel-content .day-list { flex: 1 1 0; min-width: 0; min-height: 0; }
+.panels.single .calendar-section { flex: 0 0 380px; }
+.calendar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.calendar-title {
+  margin: 0; display: flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 800;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.calendar-count {
+  padding: 1px 8px; border-radius: 999px; background: var(--accent-faint);
+  color: var(--accent); font-size: 13px; font-weight: 800;
+}
+.calendar-refresh {
+  flex: none; min-width: 32px; min-height: 28px; padding: 0 8px; border: 1.5px solid var(--accent-line);
+  border-radius: 999px; background: #fff; color: var(--accent); font-size: 16px; font-weight: 800; line-height: 1;
+}
+.calendar-refresh:active { opacity: 0.6; }
+.calendar-frame-wrap {
+  flex: 1; min-height: 0; border: 2px solid var(--accent-line); border-radius: 14px;
+  background: #fff; overflow: hidden;
+}
+.calendar-frame { width: 100%; height: 100%; border: 0; display: block; }

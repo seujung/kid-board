@@ -2,7 +2,7 @@ import { canToggle } from "../core/boardState";
 import { compareDay, dayDateOf, sameDay } from "../core/dayDate";
 import type { DayDate, TimeOfDay } from "../core/dayDate";
 import type { DimPeriod } from "../core/displayPolicy";
-import type { BoardData, ChildInfo, TaskInfo, TimeSlot, Weekday } from "../core/domain";
+import type { BoardData, ChildCalendar, ChildInfo, TaskInfo, TimeSlot, Weekday } from "../core/domain";
 import {
   hashSecret,
   isLocked,
@@ -220,14 +220,15 @@ export class BoardStore {
   // MARK: Children
 
   /** 자녀를 더하고 요일마다 기본 시각을 넣습니다. */
-  async addChild(name: string, avatar: string, themeColor: string): Promise<string> {
+  async addChild(name: string, avatar: string, themeColor: string, calendars: ChildCalendar[] = []): Promise<string> {
     this.ensureWritable();
     const id = this.newID();
+    const copy = calendars.map((cal) => ({ ...cal }));
     await this.commitData((d) => {
       const order = d.children.reduce((m, c) => Math.max(m, c.order), -1) + 1;
       return {
         ...d,
-        children: d.children.concat([{ id, name, avatar, themeColor, order }]),
+        children: d.children.concat([{ id, name, avatar, themeColor, order, calendars: copy }]),
         times: d.times.concat(defaultTimes(id)),
       };
     });
@@ -238,7 +239,8 @@ export class BoardStore {
   async updateChild(info: ChildInfo): Promise<void> {
     this.ensureWritable();
     if (!this.current.data.children.some((c) => c.id === info.id)) return;
-    await this.commitData((d) => ({ ...d, children: d.children.map((c) => (c.id === info.id ? { ...info } : c)) }));
+    const copy: ChildInfo = { ...info, calendars: info.calendars.map((cal) => ({ ...cal })) };
+    await this.commitData((d) => ({ ...d, children: d.children.map((c) => (c.id === info.id ? copy : c)) }));
   }
 
   /** 자녀와 자녀의 할 일, 일정, 시각, 완료 기록을 지웁니다. */

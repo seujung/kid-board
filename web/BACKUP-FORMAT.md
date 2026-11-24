@@ -52,6 +52,19 @@
 | `avatar` | 문자열 | 아바타 이모지입니다. |
 | `themeColor` | 문자열 | 테마 색 이름입니다. |
 | `order` | 숫자 | 보드에 놓이는 순서입니다. 작은 값이 먼저 옵니다. |
+| `calendars` | 배열 | Google 캘린더 목록입니다. 없으면 빈 배열(`[]`)로 읽습니다. |
+
+#### `data.children[].calendars[]`
+
+`calendars`는 `schemaVersion` 1에 더한 선택 필드입니다. 이 필드가 없는 이전 파일도 그대로 읽으므로 `schemaVersion`을 올리지 않았습니다.
+
+| 필드 | 형식 | 설명 |
+| --- | --- | --- |
+| `id` | 문자열 | 캘린더 항목 ID입니다. |
+| `src` | 문자열 | Google Calendar ID입니다. |
+| `ctz` | 문자열 | IANA 시간대입니다. 형식이 맞지 않거나 없으면 `"Asia/Seoul"`로 읽습니다. |
+| `label` | 문자열 | 부모 모드에서 구분하기 위한 이름입니다. 없으면 `""`로 읽습니다. |
+| `color` | 문자열 또는 `null` | `#RRGGBB` 색 코드입니다. 없거나 형식이 맞지 않으면 `null`로 읽습니다. |
 
 ### `data.tasks` 할 일
 

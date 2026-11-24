@@ -1,5 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
-import type { ChildInfo } from "../../core/domain";
+import { parseCalendarInput, shortCalendarSrc } from "../../core/calendar";
+import type { ChildCalendar, ChildInfo } from "../../core/domain";
+import { defaultNewID } from "../../store/boardStore";
 import type { BoardStore } from "../../store/boardStore";
 import { MAX_PANELS } from "../board/BoardView";
 import { themeNamed } from "../board/theme";
@@ -21,11 +23,42 @@ interface Draft {
   avatar: string;
   themeColor: string;
   order: number;
+  calendars: ChildCalendar[];
+}
+
+function appendParsedCalendars(
+  existing: ChildCalendar[],
+  rawInput: string,
+  rawLabel: string,
+): { ok: true; next: ChildCalendar[] } | { ok: false; message: string } {
+  const parsed = parseCalendarInput(rawInput);
+  if (!parsed.ok) return parsed;
+  const label = rawLabel.trim();
+  const seen = new Set(existing.map((c) => c.src));
+  const added: ChildCalendar[] = [];
+  for (const entry of parsed.entries) {
+    if (seen.has(entry.src)) continue;
+    seen.add(entry.src);
+    added.push({
+      id: defaultNewID(),
+      src: entry.src,
+      ctz: entry.ctz,
+      label,
+      color: entry.color,
+    });
+  }
+  if (added.length === 0) {
+    return { ok: false, message: "이미 등록된 캘린더예요." };
+  }
+  return { ok: true, next: existing.concat(added) };
 }
 
 function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void }) {
   const { store } = props;
   const [draft, setDraft] = useState(props.draft);
+  const [calLabel, setCalLabel] = useState("");
+  const [calInput, setCalInput] = useState("");
+  const [calError, setCalError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -47,12 +80,45 @@ function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void 
     );
   };
 
+  const addCalendar = () => {
+    const res = appendParsedCalendars(draft.calendars, calInput, calLabel);
+    if (!res.ok) {
+      setCalError(res.message);
+      return;
+    }
+    setCalError(null);
+    setCalLabel("");
+    setCalInput("");
+    setDraft({ ...draft, calendars: res.next });
+  };
+
+  const removeCalendar = (calID: string) => {
+    setCalError(null);
+    setDraft({ ...draft, calendars: draft.calendars.filter((c) => c.id !== calID) });
+  };
+
   const save = () => {
     if (!canSave) return;
+    let calendars = draft.calendars;
+    if (calInput.trim()) {
+      const res = appendParsedCalendars(calendars, calInput, calLabel);
+      if (!res.ok) {
+        setCalError(res.message);
+        return;
+      }
+      calendars = res.next;
+    }
     run(() =>
       draft.id === null
-        ? store.addChild(name, draft.avatar, draft.themeColor)
-        : store.updateChild({ id: draft.id, name, avatar: draft.avatar, themeColor: draft.themeColor, order: draft.order }),
+        ? store.addChild(name, draft.avatar, draft.themeColor, calendars)
+        : store.updateChild({
+            id: draft.id,
+            name,
+            avatar: draft.avatar,
+            themeColor: draft.themeColor,
+            order: draft.order,
+            calendars,
+          }),
     );
   };
 
@@ -113,6 +179,66 @@ function ChildForm(props: { store: BoardStore; draft: Draft; onDone: () => void 
           ))}
         </div>
       </div>
+      <div class="p-field">
+        <span class="p-label">구글 캘린더 (오늘 일정)</span>
+        {draft.calendars.length === 0 ? (
+          <div class="cal-empty">등록된 캘린더가 없어요.</div>
+        ) : (
+          <div class="cal-list">
+            {draft.calendars.map((cal) => {
+              const title = cal.label || shortCalendarSrc(cal.src);
+              return (
+                <div class="cal-row" key={cal.id}>
+                  {cal.color && <span class="cal-dot" style={{ background: cal.color }} />}
+                  <div class="cal-info">
+                    <div class="cal-title">{title}</div>
+                    {cal.label && <div class="cal-src">{shortCalendarSrc(cal.src)}</div>}
+                  </div>
+                  <button
+                    type="button"
+                    class="p-small-button danger"
+                    aria-label={`${title} 캘린더 삭제`}
+                    onClick={() => removeCalendar(cal.id)}
+                  >
+                    삭제
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div class="cal-add-box">
+          <input
+            class="p-input cal-label-input"
+            type="text"
+            value={calLabel}
+            placeholder="캘린더 이름 (예: 학교, 학원 — 비워도 돼요)"
+            maxLength={20}
+            aria-label="캘린더 이름"
+            onInput={(e) => setCalLabel((e.currentTarget as HTMLInputElement).value)}
+          />
+          <textarea
+            class="p-textarea"
+            rows={3}
+            value={calInput}
+            placeholder='<iframe src="https://calendar.google.com/calendar/embed?src=..." ...></iframe>'
+            aria-label="구글 캘린더 코드"
+            onInput={(e) => {
+              setCalError(null);
+              setCalInput((e.currentTarget as HTMLTextAreaElement).value);
+            }}
+          />
+          <div class="cal-add-actions">
+            <button type="button" class="p-button" onClick={addCalendar}>
+              ＋ 캘린더 추가
+            </button>
+          </div>
+          <ErrorLine text={calError} />
+          <div class="cal-guide">
+            Google 캘린더 설정에서 공개로 켠 뒤 ‘퍼가기 코드(&lt;iframe ...&gt;)’ 또는 주소를 붙여 넣으세요. 여러 개를 등록할 수 있어요.
+          </div>
+        </div>
+      </div>
       {draft.id !== null && (
         <button type="button" class="p-button danger" onClick={() => setConfirmDelete(true)}>
           이 자녀 삭제
@@ -150,7 +276,7 @@ export function ChildrenEditor({ store }: { store: BoardStore }) {
     setError(null);
     store.moveChild(from, to).catch((err: unknown) => setError(errorText(err)));
   };
-  const edit = (c: ChildInfo) => setEditing({ ...c });
+  const edit = (c: ChildInfo) => setEditing({ ...c, calendars: c.calendars.map((cal) => ({ ...cal })) });
   const add = () =>
     setEditing({
       id: null,
@@ -158,6 +284,7 @@ export function ChildrenEditor({ store }: { store: BoardStore }) {
       avatar: AVATARS[0] as string,
       themeColor: (THEME_CHOICES[0] as { name: string }).name,
       order: children.length,
+      calendars: [],
     });
 
   return (
@@ -169,6 +296,7 @@ export function ChildrenEditor({ store }: { store: BoardStore }) {
             <button type="button" class="p-row-main" onClick={() => edit(c)}>
               <span class="p-row-icon">{c.avatar}</span>
               <span class="p-row-title">{c.name}</span>
+              {c.calendars.length > 0 && <span class="p-row-sub">캘린더 {c.calendars.length}개</span>}
               <span class="theme-swatch small" style={{ background: themeNamed(c.themeColor).accent }} />
               {i >= MAX_PANELS && <span class="p-row-sub">보드에 안 보여요</span>}
             </button>

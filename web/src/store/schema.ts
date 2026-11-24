@@ -1,6 +1,8 @@
+import { DEFAULT_CALENDAR_TZ, normalizeHexColor, normalizeTimezone } from "../core/calendar";
 import type { DayDate, TimeOfDay } from "../core/dayDate";
 import type {
   BoardData,
+  ChildCalendar,
   ChildInfo,
   CompletionInfo,
   DailyTimesInfo,
@@ -134,9 +136,33 @@ function weekday(v: unknown): Weekday {
   return int(v, 1, 7) as Weekday;
 }
 
+function childCalendar(v: unknown): ChildCalendar {
+  const o = obj(v);
+  const src = str(o.src).trim();
+  if (!src) fail();
+  return {
+    id: str(o.id),
+    src,
+    ctz: normalizeTimezone(optional(o.ctz, str, DEFAULT_CALENDAR_TZ)),
+    label: optional(o.label, str, ""),
+    color: normalizeHexColor(optional(o.color, nullable(str), null)),
+  };
+}
+
+function childCalendars(v: unknown): ChildCalendar[] {
+  return arr(v).map(childCalendar);
+}
+
 function child(v: unknown): ChildInfo {
   const o = obj(v);
-  return { id: str(o.id), name: str(o.name), avatar: str(o.avatar), themeColor: str(o.themeColor), order: num(o.order) };
+  return {
+    id: str(o.id),
+    name: str(o.name),
+    avatar: str(o.avatar),
+    themeColor: str(o.themeColor),
+    order: num(o.order),
+    calendars: optional(o.calendars, childCalendars, []),
+  };
 }
 
 function task(v: unknown): TaskInfo {

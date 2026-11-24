@@ -14,12 +14,25 @@ export const WEEKDAY_KO: Record<Weekday, string> = {
 
 export type TimeSlot = "morning" | "evening";
 
+export interface ChildCalendar {
+  id: string;
+  /** 디코딩된 Google Calendar ID입니다. */
+  src: string;
+  /** IANA 시간대입니다. 기본값은 "Asia/Seoul"입니다. */
+  ctz: string;
+  /** 부모 모드에서 구분하기 위한 이름입니다. 비어 있을 수 있습니다. */
+  label: string;
+  /** Google Calendar 임베드 색(#RRGGBB)입니다. 없으면 null입니다. */
+  color: string | null;
+}
+
 export interface ChildInfo {
   id: string;
   name: string;
   avatar: string;
   themeColor: string;
   order: number;
+  calendars: ChildCalendar[];
 }
 
 export interface TaskInfo {

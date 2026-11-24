@@ -10,7 +10,7 @@
   position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 100;
   display: flex; flex-direction: column; background: var(--p-bg); color: var(--ink);
 }
-.parent input { -webkit-user-select: text; user-select: text; font: inherit; color: inherit; }
+.parent input, .parent textarea { -webkit-user-select: text; user-select: text; font: inherit; color: inherit; }
 .parent button:disabled { cursor: default; }
 
 /* 위 막대 */
@@ -147,6 +147,40 @@
   border-radius: 12px; background: var(--p-card); font-size: 20px; -webkit-appearance: none; appearance: none;
 }
 .p-input:focus { outline: 2px solid var(--p-accent); outline-offset: 0; }
+.p-textarea {
+  width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid var(--p-line);
+  border-radius: 12px; background: var(--p-card); font-size: 16px; line-height: 1.4;
+  resize: vertical; -webkit-appearance: none; appearance: none;
+}
+.p-textarea:focus { outline: 2px solid var(--p-accent); outline-offset: 0; }
+
+/* 자녀별 구글 캘린더 */
+.cal-empty {
+  padding: 14px 16px; border: 1px solid var(--p-line); border-radius: 12px;
+  background: var(--p-card); font-size: 16px; font-weight: 600; color: var(--p-muted);
+}
+.cal-list { border: 1px solid var(--p-line); border-radius: 14px; background: var(--p-card); overflow: hidden; }
+.cal-row {
+  display: flex; align-items: center; gap: 10px; min-height: 56px; box-sizing: border-box;
+  padding: 8px 12px; border-top: 1px solid var(--p-line);
+}
+.cal-row:first-child { border-top: 0; }
+.cal-dot { flex: none; width: 14px; height: 14px; border-radius: 50%; }
+.cal-info { flex: 1; min-width: 0; }
+.cal-title {
+  font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal-src {
+  margin-top: 2px; font-size: 14px; font-weight: 600; color: var(--p-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal-add-box {
+  display: flex; flex-direction: column; gap: 8px; padding: 14px;
+  border: 1px solid var(--p-line); border-radius: 14px; background: rgba(255, 255, 255, 0.55);
+}
+.cal-label-input { width: 100%; min-height: 46px; font-size: 17px; }
+.cal-add-actions { display: flex; justify-content: flex-start; }
+.cal-guide { font-size: 14px; font-weight: 600; color: var(--p-muted); line-height: 1.45; }
 .time-select { display: inline-flex; gap: 6px; }
 .p-select {
   min-height: 48px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--p-line);

@@ -133,8 +133,44 @@ test("addChildAppendsOrder", async () => {
 test("updateChildChangesFields", async () => {
   const { store } = await makeStore();
   const id = await store.addChild("하나", "🐱", "mint");
-  await store.updateChild({ id, name: "하나야", avatar: "🦊", themeColor: "coral", order: 0 });
-  expect(store.snapshot().children[0]).toEqual({ id, name: "하나야", avatar: "🦊", themeColor: "coral", order: 0 });
+  await store.updateChild({ id, name: "하나야", avatar: "🦊", themeColor: "coral", order: 0, calendars: [] });
+  expect(store.snapshot().children[0]).toEqual({
+    id,
+    name: "하나야",
+    avatar: "🦊",
+    themeColor: "coral",
+    order: 0,
+    calendars: [],
+  });
+});
+
+test("childCalendarsPersistAndCopyDefensively", async () => {
+  const storage = idbStorage(freshDBName());
+  const store = await BoardStore.open(storage, () => at(2026, 11, 19, 7), counterID());
+  const cals = [
+    { id: "cal-1", src: "school@group.calendar.google.com", ctz: "Asia/Seoul", label: "학교", color: "#039BE5" },
+    { id: "cal-2", src: "academy@group.calendar.google.com", ctz: "Asia/Seoul", label: "학원", color: null },
+  ];
+  const id = await store.addChild("하나", "🐱", "mint", cals);
+  cals[0]!.label = "바뀐 이름";
+  cals.push({ id: "cal-3", src: "extra@group.calendar.google.com", ctz: "Asia/Seoul", label: "", color: null });
+  expect(store.snapshot().children[0]!.calendars).toHaveLength(2);
+  expect(store.snapshot().children[0]!.calendars[0]!.label).toBe("학교");
+
+  await store.updateChild({
+    id,
+    name: "하나",
+    avatar: "🐱",
+    themeColor: "mint",
+    order: 0,
+    calendars: [
+      { id: "cal-1", src: "school@group.calendar.google.com", ctz: "Asia/Seoul", label: "학교", color: "#039BE5" },
+      { id: "cal-2", src: "academy@group.calendar.google.com", ctz: "Asia/Seoul", label: "피아노", color: "#D50000" },
+    ],
+  });
+  const reopened = await BoardStore.open(storage, () => at(2026, 11, 19, 7), counterID());
+  expect(reopened.snapshot().children[0]!.calendars).toHaveLength(2);
+  expect(reopened.snapshot().children[0]!.calendars[1]!.label).toBe("피아노");
 });
 
 test("moveChildRewritesOrder", async () => {

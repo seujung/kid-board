@@ -48,7 +48,14 @@ export function seedData(today: DayDate, newID: () => string): BoardData {
   const createdAt = atTime(today, { hour: 0, minute: 0 }).getTime();
   SEED_CHILDREN.forEach((seed, index) => {
     const childID = newID();
-    data.children.push({ id: childID, name: seed.name, avatar: seed.avatar, themeColor: seed.themeColor, order: index });
+    data.children.push({
+      id: childID,
+      name: seed.name,
+      avatar: seed.avatar,
+      themeColor: seed.themeColor,
+      order: index,
+      calendars: [],
+    });
     data.times.push(...defaultTimes(childID));
     SEED_TASKS.forEach((t, order) => {
       const taskID = newID();
